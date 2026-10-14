@@ -42,9 +42,14 @@
    * Verbose version identifier which should contain a reference to the location
    * from where the binary was downloaded or the source code was compiled.
    */
-  // "NB1" marks the NORTHBOLT safety fixes (FIRMWARE_SAFETY_FIXES.md). M115 reports it, so you can
-  // tell a flashed board apart; the short version above is unchanged for older host software.
-  #define DETAILED_BUILD_VERSION SHORT_BUILD_VERSION " (Github, NB1 safety fixes)"
+  // M115 reports this, which is how NORTHBOLT tells which firmware the board runs (and whether a
+  // GitHub release is newer). Release builds pass the tag: -DNB_RELEASE=fw-1.1.9.9-NB2 gives
+  // "1.1.9.9 (Github, fw-1.1.9.9-NB2)". The short version above is unchanged for older host software.
+  #ifdef NB_RELEASE
+    #define DETAILED_BUILD_VERSION SHORT_BUILD_VERSION " (Github, " STRINGIFY(NB_RELEASE) ")"
+  #else
+    #define DETAILED_BUILD_VERSION SHORT_BUILD_VERSION " (Github, NB1 safety fixes)"
+  #endif
 
   /**
    * The STRING_DISTRIBUTION_DATE represents when the binary file was built,

@@ -37,6 +37,8 @@ It runs the screen on the printer and is also usable from a phone or computer on
 - **On-screen keyboard** for every text box on the Pi's screen, which has no system keyboard. Phones and computers use their own keyboard.
 - **Firmware updates from GitHub** (Settings → Firmware): point it at your own repository and it installs the latest release's printer
   firmware over the USB cable. It saves a backup of the current firmware first, and can restore it.
+  It also checks by itself, shortly after start-up and then every 6 hours. When the latest release differs from what the board runs,
+  it shows a prompt (never during a print) with **Later**, **Skip this version** and **Install**, plus an amber dot on Settings.
   See `FIRMWARE_SAFETY_FIXES.md` for how releases are made.
 - **Console** with quick buttons for M114, M503, M420 V, G29 and others.
 - **Emergency stop** on every screen.

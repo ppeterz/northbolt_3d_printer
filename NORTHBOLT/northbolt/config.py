@@ -101,6 +101,10 @@ DEFAULTS = {
         "avrdude": ["avrdude"],
         "programmer": "wiring",     # the MKS Gen 1.3 stk500v2 bootloader
         "baud": 115200,
+        "auto_check": True,         # look for a new release by itself and offer it on the screen
+        "check_hours": 6,
+        "first_check_s": 60,        # first look this long after start-up
+        "skipped_tag": "",          # "Skip this version" remembers the release here
     },
 
     "leds": {"enabled": True, "progress": True, "brightness": 0.6},

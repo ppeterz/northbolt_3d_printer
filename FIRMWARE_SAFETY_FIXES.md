@@ -79,6 +79,9 @@ NORTHBOLT then:
 - reads the current firmware off the board as a backup;
 - flashes the new firmware with avrdude, reconnects, and shows what the board now reports.
 
+**Automatic checks:** NORTHBOLT checks by itself every 6 hours. It offers an update when the firmware inside the latest release differs from what the board reports.
+Release builds put their tag into that name, so a board on `fw-1.1.9.9-NB2` reports `Marlin 1.1.9.9 (Github, fw-1.1.9.9-NB2)`, and every new tag counts as an update.
+
 **Restore backup…** puts the previous firmware back. A private repository needs a read-only GitHub token in the same screen.
 
 ## Flashing the printer board by hand

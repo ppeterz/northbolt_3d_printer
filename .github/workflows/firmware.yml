@@ -27,7 +27,11 @@ jobs:
         run: pip install platformio
 
       - name: Build printer firmware (MKS Gen 1.3)
-        run: pio run -e skriware2
+        # Release builds put the tag in the firmware name (M115), so NORTHBOLT can tell
+        # which release a board runs and offer newer ones.
+        run: |
+          case "$GITHUB_REF" in refs/tags/fw-*) export PLATFORMIO_BUILD_FLAGS="-DNB_RELEASE=${GITHUB_REF_NAME}";; esac
+          pio run -e skriware2
 
       - name: Build LED and scale board firmware
         run: pio run -d Atmega_Soft/led_and_scale -e atmega328

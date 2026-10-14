@@ -20,12 +20,41 @@ import argparse
 import asyncio
 import json
 import math
+import os
 import random
 import re
 import time
 
 BUFSIZE = 10
 PLANNER = 16
+
+
+def firmware_name_from_hex(path):
+    """The FIRMWARE_NAME inside an Intel HEX file: lets tests 'flash' the simulated board."""
+    if not path or not os.path.exists(path):
+        return None
+    image, base = {}, 0
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line.startswith(":"):
+                continue
+            raw = bytes.fromhex(line[1:])
+            count, addr, rtype, data = raw[0], (raw[1] << 8) | raw[2], raw[3], raw[4:4 + raw[0]]
+            if rtype == 0:
+                for i, b in enumerate(data):
+                    image[base + addr + i] = b
+            elif rtype == 2:
+                base = ((data[0] << 8) | data[1]) << 4
+            elif rtype == 4:
+                base = ((data[0] << 8) | data[1]) << 16
+            elif rtype == 1:
+                break
+    if not image:
+        return None
+    blob = bytes(image.get(i, 0xFF) for i in range(max(image) + 1))
+    m = re.search(rb"FIRMWARE_NAME:([^\x00]*?) SOURCE_CODE_URL", blob)
+    return m.group(1).decode() if m else None
 
 
 def checksum(text):
@@ -268,7 +297,8 @@ class Firmware:
         elif code == "M155":
             self.auto_report = int(p.get("S") or 0)
         elif code == "M115":
-            self.out("FIRMWARE_NAME:Marlin 1.1.9.9 (Github) SOURCE_CODE_URL:https://github.com/MarlinFirmware/Marlin "
+            name = firmware_name_from_hex(os.environ.get("SIM_FLASH_HEX")) or "Marlin 1.1.9.9 (Github)"
+            self.out(f"FIRMWARE_NAME:{name} SOURCE_CODE_URL:https://github.com/MarlinFirmware/Marlin "
                      "PROTOCOL_VERSION:1.0 MACHINE_TYPE:3D Printer EXTRUDER_COUNT:2 UUID:sim")
             self.out("Cap:AUTOREPORT_TEMP:1")
             self.out("Cap:EMERGENCY_PARSER:1")

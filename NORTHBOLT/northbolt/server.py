@@ -451,6 +451,10 @@ def make_app(svc):
             svc.fw.install()
         elif action == "restore":
             svc.fw.restore()
+        elif action == "skip":
+            svc.fw.skip()
+        elif action == "snooze":
+            svc.fw.snooze(float((await body(request)).get("hours", 24)))
         else:
             raise web.HTTPNotFound()
         return ok(svc.fw.snapshot())

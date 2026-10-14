@@ -102,6 +102,10 @@ class FirmwareUpdater:
         self.result = None
         self.error = None
         self._task = None
+        self.available = None      # newer release than the board runs: {tag, name, firmware, current}
+        self.last_check = None
+        self.snoozed_until = 0.0
+        self._name_cache = {}
 
     @property
     def busy(self):
@@ -118,7 +122,9 @@ class FirmwareUpdater:
         return {
             "state": self.state, "phase": self.phase, "progress": self.progress, "message": self.message,
             "release": self.release, "result": self.result, "error": self.error, "backup": self.backup(),
-            "repo": cfg["github_repo"],
+            "repo": cfg["github_repo"], "available": self.available, "prompt": self.prompt(),
+            "last_check": self.last_check, "auto_check": cfg.get("auto_check", True),
+            "skipped_tag": cfg.get("skipped_tag"),
         }
 
     def _set(self, state=None, phase=None, progress=None, message=None):
@@ -139,15 +145,12 @@ class FirmwareUpdater:
             h["Authorization"] = f"Bearer {token}"
         return h
 
-    async def check(self):
-        if self.busy:
-            raise FirmwareError("Busy")
+    async def _fetch_release(self):
+        """The latest release and its printer .hex asset. Raises FirmwareError; doesn't touch the UI state."""
         cfg = self.svc.settings["firmware"]
         if not cfg["github_repo"]:
             raise FirmwareError("Set your GitHub repository first")
         repo = parse_repo(cfg["github_repo"])
-        self.error = None
-        self._set("checking", message=f"Checking {repo}")
         url = f"{cfg['github_api'].rstrip('/')}/repos/{repo}/releases/latest"
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
@@ -162,33 +165,125 @@ class FirmwareUpdater:
                         raise FirmwareError(f"GitHub answered {r.status}")
                     rel = await r.json(content_type=None)
         except aiohttp.ClientError as exc:
-            self._set("error", message="")
-            self.error = f"Can't reach GitHub: {exc}. Is the printer online?"
-            raise FirmwareError(self.error)
-        except FirmwareError as exc:
-            self.error = str(exc)
-            self._set("error", message="")
-            raise
+            raise FirmwareError(f"Can't reach GitHub: {exc}. Is the printer online?")
         hexes = [a for a in rel.get("assets", []) if a.get("name", "").lower().endswith(".hex")]
         match = (cfg.get("asset_match") or "printer").lower()
         picked = [a for a in hexes if match in a["name"].lower()] or (hexes if len(hexes) == 1 else [])
         if not picked:
-            self.error = (f"The latest release ({rel.get('tag_name')}) has no printer .hex file "
-                          f"(looking for a name containing '{match}').")
-            self._set("error", message="")
-            raise FirmwareError(self.error)
+            raise FirmwareError(f"The latest release ({rel.get('tag_name')}) has no printer .hex file "
+                                f"(looking for a name containing '{match}').")
         a = picked[0]
-        self.release = {
+        return {
             "repo": repo, "tag": rel.get("tag_name"), "name": rel.get("name") or rel.get("tag_name"),
             "notes": (rel.get("body") or "")[:2000], "published": rel.get("published_at"),
             "asset": a["name"], "size": a.get("size"), "digest": a.get("digest"),
             "download": a.get("browser_download_url"), "api_url": a.get("url"),
+            "asset_id": a.get("id"), "updated": a.get("updated_at"),
         }
+
+    async def _release_firmware_name(self, rel):
+        """The firmware name inside the release's .hex (what M115 will report once installed). Cached."""
+        key = (rel.get("download"), rel.get("digest"), rel.get("size"), rel.get("updated"))
+        if self._name_cache.get("key") == key:
+            return self._name_cache["name"]
+        info = check_hex(await self._download(rel, report=False))
+        self._name_cache = {"key": key, "name": info["name"]}
+        return info["name"]
+
+    def _board_firmware_name(self):
+        fw = self.svc.firmware or ""
+        m = re.search(r"FIRMWARE_NAME:(.*?) SOURCE_CODE_URL", fw)
+        return m.group(1) if m else None
+
+    async def _compare(self, rel):
+        """Is the release different from what the board runs? Sets self.available."""
+        rel_name = await self._release_firmware_name(rel)
+        board = self._board_firmware_name()
+        self.last_check = time.time()
+        if board is None:
+            self.available = None            # can't tell without the board's M115
+        elif rel_name != board:
+            self.available = {"tag": rel["tag"], "name": rel["name"], "firmware": rel_name, "current": board}
+        else:
+            self.available = None
+        self.svc.notify("firmware")
+        return self.available
+
+    async def check(self):
+        """'Check for update' button: fetch the release, show it, and work out if it's new."""
+        if self.busy:
+            raise FirmwareError("Busy")
+        self.error = None
+        try:
+            repo = parse_repo(self.svc.settings["firmware"]["github_repo"]) \
+                if self.svc.settings["firmware"]["github_repo"] else ""
+            self._set("checking", message=f"Checking {repo}")
+            rel = await self._fetch_release()
+            await self._compare(rel)         # downloads and checks the .hex, so a bad file is caught here
+            self.release = rel
+        except FirmwareError as exc:
+            self.error = str(exc)
+            self._set("error", message="")
+            raise
         self._set("ready", message="")
         return self.release
 
-    async def _download(self):
-        rel = self.release
+    async def auto_check(self):
+        """Background check: never changes the screen except to offer an update."""
+        if self.busy or not self.svc.link.ready or self.svc.job.active:
+            return
+        try:
+            rel = await self._fetch_release()
+            await self._compare(rel)
+            if self.available:
+                self.release = rel           # so Install works straight from the prompt
+                if self.state == "idle":
+                    self.state = "ready"     # the Firmware tab shows the release card
+            log.info("Update check: %s", f"{self.available['tag']} available" if self.available else "up to date")
+        except FirmwareError as exc:
+            log.info("Update check failed: %s", exc)
+
+    async def auto_task(self):
+        cfg = self.svc.settings["firmware"]
+        await asyncio.sleep(cfg.get("first_check_s", 60))
+        while True:
+            cfg = self.svc.settings["firmware"]
+            try:
+                if cfg.get("auto_check", True) and cfg["github_repo"]:
+                    # wait until the board has reported its firmware, so there is something to compare
+                    for _ in range(120):
+                        if self.svc.link.ready and self.svc.firmware:
+                            break
+                        await asyncio.sleep(5)
+                    await self.auto_check()
+                await asyncio.sleep(max(60.0, float(cfg.get("check_hours", 6)) * 3600))
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                log.exception("Update check task")
+                await asyncio.sleep(3600)
+
+    def prompt(self):
+        """Should the screen offer the update now?"""
+        a = self.available
+        if not a or self.busy or self.svc.job.active:
+            return False
+        if a["tag"] == self.svc.settings["firmware"].get("skipped_tag"):
+            return False
+        return time.time() >= self.snoozed_until
+
+    def snooze(self, hours=24):
+        self.snoozed_until = time.time() + hours * 3600
+        self.svc.notify("firmware")
+
+    def skip(self):
+        if not self.available:
+            raise FirmwareError("There's no update to skip")
+        self.svc.settings.update({"firmware": {"skipped_tag": self.available["tag"]}})
+        self.svc.notify("firmware")
+
+    async def _download(self, rel=None, report=True):
+        rel = rel or self.release
         cfg = self.svc.settings["firmware"]
         private = bool(cfg.get("token"))
         url = rel["api_url"] if private and rel.get("api_url") else rel["download"]
@@ -202,7 +297,7 @@ class FirmwareUpdater:
                     data += chunk
                     if len(data) > MAX_DOWNLOAD:
                         raise FirmwareError("The download is far too big for printer firmware")
-                    if rel.get("size"):
+                    if report and rel.get("size"):
                         self._set(progress=min(100, int(100 * len(data) / rel["size"])))
         digest = rel.get("digest") or ""
         if digest.startswith("sha256:"):
@@ -321,6 +416,11 @@ class FirmwareUpdater:
             fw = svc.firmware or ""
             self.result = {"expected": info["name"], "reported": fw.replace("FIRMWARE_NAME:", "").split(" SOURCE_CODE_URL")[0]}
             ok = info["name"] in fw
+            if self.release:                 # after an update (or a restore) recompare with the release
+                try:
+                    await self._compare(self.release)
+                except FirmwareError:
+                    pass
             self._set("done", message="Firmware updated." if ok else
                       "Flashed, but the board reports a different firmware name. Check Settings → Connection.")
             log.info("Firmware now: %s", fw)

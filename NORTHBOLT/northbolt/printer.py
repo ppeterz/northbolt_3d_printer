@@ -103,6 +103,7 @@ class PrinterService:
             asyncio.ensure_future(self._scale_task()),
             asyncio.ensure_future(self._wifi_task()),
             asyncio.ensure_future(self.usb.task()),
+            asyncio.ensure_future(self.fw.auto_task()),
         ]
         for name in self.list_file_names():
             if not os.path.exists(self._meta_path(name)):

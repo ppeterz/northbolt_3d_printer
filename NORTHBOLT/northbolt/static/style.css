@@ -55,6 +55,10 @@ button { font: inherit; color: inherit; }
 #rail button.active svg { color: var(--accent); }
 #rail .grow { flex: 1; }
 #rail button { position: relative; }
+#rail button.update::after {   /* a firmware update is waiting */
+  content: ""; position: absolute; top: 8px; right: 14px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--warn); box-shadow: 0 0 0 2px var(--panel);
+}
 #rail button.usb::after {   /* a USB drive is plugged in */
   content: ""; position: absolute; top: 8px; right: 14px; width: 9px; height: 9px; border-radius: 50%;
   background: var(--ok); box-shadow: 0 0 0 2px var(--panel);

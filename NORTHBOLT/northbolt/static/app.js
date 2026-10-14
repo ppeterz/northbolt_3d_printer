@@ -881,6 +881,7 @@ function firmwareCard() {
         <input type="password" id="fw-token" data-label="GitHub token (private repositories only)" placeholder="Token, only for a private repository" style="flex:1" value="${esc(fw.token || '')}">
       </div>
     </div>
+    <div class="card" id="fw-auto"></div>
     <div class="split-edges">
       <div class="row wrap"><button class="btn hidden" id="fw-restore">Restore backup…</button></div>
       <div class="row wrap"><button class="btn primary" id="fw-check">Check for update</button></div>
@@ -888,6 +889,10 @@ function firmwareCard() {
     <div id="fw-release"></div>
     <div id="fw-status"></div>
   </div>`);
+  const auto = $('#fw-auto', card);
+  auto.appendChild(el('<div class="muted num" id="fw-avail" style="font-size:14px;padding-bottom:4px"></div>'));
+  auto.appendChild(fieldNode(tog('firmware.auto_check', 'Check for updates by itself',
+    'Looks at your repository every few hours and asks before installing anything')));
   $('#fw-save', card).onclick = e => act(e.currentTarget, async () => {
     const changes = { github_repo: $('#fw-repo', card).value.trim() };
     const token = $('#fw-token', card).value;
@@ -936,13 +941,17 @@ function renderFirmware() {
   const fwNow = (S.connection.firmware || '').replace('FIRMWARE_NAME:', '').split(' SOURCE_CODE_URL')[0];
   $('#fw-now').textContent = fwNow || 'not connected';
   $('#fw-restore').classList.toggle('hidden', !fu.backup);
+  const checked = fu.last_check ? new Date(fu.last_check * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : null;
+  $('#fw-avail').innerHTML = fu.available
+    ? `<b style="color:var(--warn)">Update available: ${esc(fu.available.name)}</b>${fu.available.tag === fu.skipped_tag ? ' (skipped)' : ''}`
+    : (checked ? `Up to date. Last checked at ${esc(checked)}.` : 'Not checked yet.');
   $('#fw-check').disabled = fu.state === 'checking' || fu.state === 'working';
   const rel = fu.release;
   const relBox = $('#fw-release');
   const sig = JSON.stringify([rel, fu.state]);
   if (relBox.dataset.sig !== sig) {
     relBox.dataset.sig = sig;
-    if (rel && (fu.state === 'ready' || fu.state === 'done' || fu.state === 'error')) {
+    if (rel && (fu.state === 'ready' || fu.state === 'done' || fu.state === 'error' || fu.available)) {
       const when = rel.published ? new Date(rel.published).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       relBox.innerHTML = `<div class="card stack">
         <div class="row between"><h3 style="margin:0">Latest release</h3><span class="muted">${esc(rel.repo)}</span></div>
@@ -966,6 +975,36 @@ function renderFirmware() {
   const st = $('#fw-status');
   st.innerHTML = fu.state === 'checking' ? `<div class="banner info"><div class="spinner"></div><div class="text">${esc(fu.message)}</div></div>`
     : (fu.state === 'error' && fu.error ? `<div class="banner error"><div class="text">${esc(fu.error)}</div></div>` : '');
+}
+
+// ------------------------------------------------------------------ "update available" prompt
+let fwPromptModal = null;
+let fwPromptQuietUntil = 0;
+
+function renderFirmwarePrompt() {
+  const fu = S.firmware_update;
+  const a = fu && fu.available;
+  $('#rail [data-page="settings"]').classList.toggle('update', !!(a && a.tag !== fu.skipped_tag));
+  const want = fu && fu.prompt && a && Date.now() > fwPromptQuietUntil;
+  if (!want) {
+    if (fwPromptModal && !(fu && fu.prompt)) { fwPromptModal.close(); fwPromptModal = null; }
+    return;
+  }
+  if (fwPromptModal) return;
+  const quiet = () => { fwPromptQuietUntil = Date.now() + 5000; };
+  fwPromptModal = modal({
+    title: 'Firmware update available', sticky: true,
+    body: `<p><b>${esc(a.name)}</b> is ready in your GitHub repository.</p>
+      <div class="row between"><span class="muted">The printer runs</span><span class="num" style="text-align:right">${esc(a.current)}</span></div>
+      <div class="row between"><span class="muted">New version</span><span class="num" style="text-align:right">${esc(a.firmware)}</span></div>
+      <p class="muted" style="font-size:13px">Installing takes about 2 minutes. The heaters turn off and the current firmware is saved first, so you can go back. Don't turn the printer off while it runs.</p>`,
+    actions: [
+      { label: 'Later', onClick: async () => { quiet(); await post('/api/firmware/snooze', { hours: 24 }); toast('Reminding you tomorrow'); } },
+      { label: 'Skip this version', onClick: async () => { quiet(); await post('/api/firmware/skip'); } },
+      { label: 'Install', cls: 'warn', onClick: async () => { quiet(); await post('/api/firmware/install'); } },
+    ],
+    onClose: () => { fwPromptModal = null; },
+  });
 }
 
 // ------------------------------------------------------------------ websocket
@@ -1051,6 +1090,7 @@ function render() {
   renderUsbSources();
   renderUsbCopy();
   renderFirmware();
+  renderFirmwarePrompt();
   if (page === 'settings') renderSettingsLive();
 }
 

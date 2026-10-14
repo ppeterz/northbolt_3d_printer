@@ -394,6 +394,9 @@ class LevelingE2ETests(E2EBase):
 
 class FirmwareUpdateTests(E2EBase):
     """Check a fake GitHub release, download, back up, flash with a fake avrdude, reconnect, restore."""
+    release_name = "Marlin 1.1.9.9 (Github)"
+    release_tag = "fw-1.1.9.9-NB1"
+    extra_fw = {"auto_check": False}
 
     def setUp(self):
         import hashlib
@@ -403,7 +406,7 @@ class FirmwareUpdateTests(E2EBase):
         import threading
         from helpers import fake_firmware, free_port
         self.work = tempfile.mkdtemp(prefix="northbolt-fw-")
-        self.release_hex = fake_firmware("Marlin 1.1.9.9 (Github)")          # what the simulator reports
+        self.release_hex = fake_firmware(self.release_name)
         self.flash = os.path.join(self.work, "board.hex")                      # the "board's" firmware
         self.old_hex = fake_firmware("Marlin 1.1.9.9 (Github) old")
         with open(self.flash, "wb") as fh:
@@ -420,7 +423,7 @@ class FirmwareUpdateTests(E2EBase):
 
             def do_GET(self):
                 if self.path == "/repos/ppeterz/SkriwareFirmware/releases/latest":
-                    body = json.dumps({"tag_name": "fw-1.1.9.9-NB1", "name": "NB1 safety fixes",
+                    body = json.dumps({"tag_name": test.release_tag, "name": test.release_tag,
                                        "body": "Thermal checks tightened.", "published_at": "2026-10-15T08:00:00Z",
                                        "assets": [
                                            {"name": "led-scale-board-NB1.hex", "size": 10,
@@ -444,8 +447,10 @@ class FirmwareUpdateTests(E2EBase):
         here = os.path.dirname(os.path.abspath(__file__))
         self.settings = {"firmware": {"github_repo": "https://github.com/ppeterz/SkriwareFirmware",
                                       "github_api": f"http://127.0.0.1:{port}",
-                                      "avrdude": [sys.executable, os.path.join(here, "fake_avrdude.py")]}}
-        self.env = {"FAKE_AVRDUDE_FLASH": self.flash, "FAKE_AVRDUDE_LOG": self.log}
+                                      "avrdude": [sys.executable, os.path.join(here, "fake_avrdude.py")],
+                                      **self.extra_fw}}
+        # the simulator reports the firmware name found in the "board's" flash file
+        self.env = {"FAKE_AVRDUDE_FLASH": self.flash, "FAKE_AVRDUDE_LOG": self.log, "SIM_FLASH_HEX": self.flash}
         super().setUp()
 
     def tearDown(self):
@@ -485,11 +490,13 @@ class FirmwareUpdateTests(E2EBase):
 
     def test_bad_checksum_never_flashes(self):
         self.digest = "sha256:" + "0" * 64
-        self.rig.post("/api/firmware/check")
-        self.rig.post("/api/firmware/install")
-        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error"), 30, "update to fail")
+        r = self.rig.post("/api/firmware/check", expect_ok=False)      # the check downloads and verifies it
+        self.assertEqual(r["status"], 400)
+        self.assertIn("checksum", r["error"])
+        r = self.rig.post("/api/firmware/install", expect_ok=False)    # nothing to install
+        self.assertEqual(r["status"], 400)
+        st = self.rig.state()
         self.assertEqual(st["firmware_update"]["state"], "error")
-        self.assertIn("checksum", st["firmware_update"]["error"])
         self.assertEqual(self.calls(), [])                             # avrdude never ran
         self.assertTrue(st["connection"]["ready"])                     # the printer was never disconnected
 
@@ -502,6 +509,78 @@ class FirmwareUpdateTests(E2EBase):
         self.assertIn("printing", r["error"])
         self.rig.post("/api/job/cancel")
         self.rig.wait(lambda s: s["job"]["state"] == "cancelled", 40)
+
+
+class FirmwareAutoCheckTests(FirmwareUpdateTests):
+    """The printer notices a newer release by itself and offers it."""
+    release_name = "Marlin 1.1.9.9 (Github, fw-1.1.9.9-NB2)"
+    release_tag = "fw-1.1.9.9-NB2"
+    extra_fw = {"auto_check": True, "first_check_s": 1}
+
+    def wait_prompt(self):
+        return self.rig.wait(lambda s: (s["firmware_update"] or {}).get("prompt"), 30, "update prompt")
+
+    def test_check_install_and_restore(self):    # covered by the parent class
+        pass
+
+    def test_bad_checksum_never_flashes(self):
+        pass
+
+    def test_refused_while_printing(self):
+        pass
+
+    def test_prompt_later_and_skip(self):
+        st = self.wait_prompt()
+        a = st["firmware_update"]["available"]
+        self.assertEqual(a["tag"], "fw-1.1.9.9-NB2")
+        self.assertEqual(a["current"], "Marlin 1.1.9.9 (Github) old")
+        self.assertEqual(a["firmware"], "Marlin 1.1.9.9 (Github, fw-1.1.9.9-NB2)")
+        self.assertEqual(self.calls(), [])                         # nothing flashed without asking
+        self.rig.post("/api/firmware/snooze", {"hours": 24})
+        st = self.rig.state()
+        self.assertFalse(st["firmware_update"]["prompt"])
+        self.assertIsNotNone(st["firmware_update"]["available"])   # still listed in Settings
+        self.rig.post("/api/firmware/skip")
+        self.assertEqual(self.rig.get("/api/settings")["firmware"]["skipped_tag"], "fw-1.1.9.9-NB2")
+        self.assertFalse(self.rig.state()["firmware_update"]["prompt"])
+
+    def test_install_from_prompt(self):
+        self.wait_prompt()
+        self.rig.post("/api/firmware/install")
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error"), 60, "update to finish")
+        self.assertEqual(st["firmware_update"]["state"], "done", st["firmware_update"])
+        self.assertEqual(st["firmware_update"]["message"], "Firmware updated.")
+        self.assertIsNone(st["firmware_update"]["available"])      # the board now runs the release
+        self.assertFalse(st["firmware_update"]["prompt"])
+        self.assertIn("fw-1.1.9.9-NB2", st["connection"]["firmware"])
+
+    def test_no_prompt_while_printing(self):
+        self.make(layers=40, segs=40)
+        self.start_print()
+        time.sleep(4)                                              # the first check has run by now
+        self.assertFalse(self.rig.state()["firmware_update"]["prompt"])
+        self.rig.post("/api/job/cancel")
+        self.rig.wait(lambda s: s["job"]["state"] == "cancelled", 40)
+
+
+class UpToDateTests(FirmwareUpdateTests):
+    """The release matches what the board runs: no prompt."""
+    release_name = "Marlin 1.1.9.9 (Github) old"
+    extra_fw = {"auto_check": True, "first_check_s": 1}
+
+    def test_check_install_and_restore(self):
+        pass
+
+    def test_bad_checksum_never_flashes(self):
+        pass
+
+    def test_refused_while_printing(self):
+        pass
+
+    def test_up_to_date(self):
+        st = self.rig.wait(lambda s: (s["firmware_update"] or {}).get("last_check"), 30, "first check")
+        self.assertIsNone(st["firmware_update"]["available"])
+        self.assertFalse(st["firmware_update"]["prompt"])
 
 
 class UsbTests(E2EBase):
