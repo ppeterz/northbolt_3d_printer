@@ -1,0 +1,16 @@
+[Unit]
+Description=NORTHBOLT (print server and touch UI backend)
+After=network.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DEST@
+ExecStart=/usr/bin/python3 -m northbolt --data @HOME@/northbolt-data --port @PORT@
+Restart=always
+RestartSec=3
+# Keep serial timing steady on the Pi 3
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

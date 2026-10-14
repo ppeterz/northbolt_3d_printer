@@ -1,0 +1,5 @@
+# On Raspberry Pi OS, deploy/install.sh installs these from apt instead.
+aiohttp>=3.8
+pyserial>=3.5
+smbus2>=0.4      # LED/scale board on I2C (Raspberry Pi only)
+gpiozero>=1.6    # power button signal (Raspberry Pi only)

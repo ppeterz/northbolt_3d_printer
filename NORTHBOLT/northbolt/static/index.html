@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f1215">
+<title>NORTHBOLT</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2 5 13.5h6L10 22l9-11.5h-6z"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+    <symbol id="i-spool" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M21 12h-6"/></symbol>
+    <symbol id="i-z" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5l-4 5-4-5z"/><path d="M3 20h18"/><path d="M12 15v2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-house" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v9H4z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <nav id="rail">
+    <button data-page="home" class="active"><svg><use href="#i-home"/></svg>Home</button>
+    <button data-page="files"><svg><use href="#i-files"/></svg>Files</button>
+    <button data-page="control"><svg><use href="#i-move"/></svg>Control</button>
+    <button data-page="filament"><svg><use href="#i-spool"/></svg>Filament</button>
+    <button data-page="zoffset"><svg><use href="#i-z"/></svg>Calibrate</button>
+    <div class="grow"></div>
+    <button data-page="wifi" id="rail-wifi" class="hidden"><span class="wicon"></span><span class="wlabel">Wi-Fi</span></button>
+    <button data-page="settings"><svg><use href="#i-gear"/></svg>Settings</button>
+  </nav>
+
+  <div id="main">
+    <header id="topbar">
+      <span class="brand" aria-label="NORTHBOLT"><svg><use href="#i-bolt"/></svg>NORTHBOLT</span>
+      <span id="status-pill" class="pill">Connecting</span>
+      <span id="top-temps" class="num"></span>
+      <span class="spacer"></span>
+      <span id="clock" class="num"></span>
+      <button id="estop" title="Emergency stop">STOP</button>
+    </header>
+
+    <div id="content">
+      <div id="alerts"></div>
+
+      <!-- ============================== HOME ============================== -->
+      <section class="page active" id="page-home">
+        <div id="recovery-banner" class="banner warning hidden">
+          <div class="text"><b>A print was interrupted by a power cut.</b><br><span id="recovery-text" class="muted"></span></div>
+          <button class="btn small" data-act="recovery-discard">Discard</button>
+          <button class="btn small warn" data-act="recovery-resume">Resume…</button>
+        </div>
+
+        <div class="grid cols-3" style="margin-bottom: var(--gap)">
+          <div class="card temp-tile" data-heater="t0" id="tile-t0">
+            <div class="label"><i style="background:var(--left)"></i>Left nozzle</div>
+            <div class="value num"><span data-b="t0.actual">–</span><small>°C</small></div>
+            <div class="target num" data-b="t0.target">off</div>
+            <div class="heatbar"></div>
+          </div>
+          <div class="card temp-tile" data-heater="t1" id="tile-t1">
+            <div class="label"><i style="background:var(--right)"></i>Right nozzle</div>
+            <div class="value num"><span data-b="t1.actual">–</span><small>°C</small></div>
+            <div class="target num" data-b="t1.target">off</div>
+            <div class="heatbar"></div>
+          </div>
+          <div class="card temp-tile" data-heater="bed" id="tile-bed">
+            <div class="label"><i style="background:var(--bed)"></i>Bed</div>
+            <div class="value num"><span data-b="bed.actual">–</span><small>°C</small></div>
+            <div class="target num" data-b="bed.target">off</div>
+            <div class="heatbar"></div>
+          </div>
+        </div>
+
+        <div class="card" id="job-card">
+          <div class="job">
+            <div id="job-thumb" class="thumb empty">No file</div>
+            <div>
+              <div class="row between">
+                <div class="job-name" id="job-name">Ready to print</div>
+                <span class="muted" id="job-state"></span>
+              </div>
+              <div class="row between" style="align-items:flex-end">
+                <div class="job-pct num" id="job-pct"></div>
+                <div class="muted num" id="job-eta"></div>
+              </div>
+              <div class="bar" id="job-bar"><div></div></div>
+              <div class="stats">
+                <div class="stat"><div class="k">Layer</div><div class="v num" id="job-layer">–</div></div>
+                <div class="stat"><div class="k">Height</div><div class="v num" id="job-z">–</div></div>
+                <div class="stat"><div class="k">Elapsed</div><div class="v num" id="job-elapsed">–</div></div>
+                <div class="stat"><div class="k">Left</div><div class="v num" id="job-remaining">–</div></div>
+              </div>
+            </div>
+          </div>
+          <div id="job-reason" class="banner warning hidden" style="margin:12px 0 0"></div>
+          <div class="row wrap" style="margin-top:12px" id="job-actions">
+            <button class="btn big primary" id="btn-choose" data-goto="files"><svg><use href="#i-files"/></svg>Choose a file</button>
+            <button class="btn big warn hidden" id="btn-pause" data-act="pause"><svg><use href="#i-pause"/></svg>Pause</button>
+            <button class="btn big ok hidden" id="btn-resume" data-act="resume"><svg><use href="#i-play"/></svg>Resume</button>
+            <button class="btn big hidden" id="btn-cancel" data-act="cancel"><svg><use href="#i-stop"/></svg>Cancel</button>
+            <button class="btn big hidden" id="btn-filament" data-goto="filament"><svg><use href="#i-spool"/></svg>Filament</button>
+            <span class="spacer"></span>
+            <div class="row hidden" id="job-tune">
+              <div class="stack" style="gap:2px">
+                <span class="muted" style="font-size:12px">Speed</span>
+                <div class="stepper"><button data-tune="speed" data-d="-10">−</button><span class="v num" id="tune-speed">100%</span><button data-tune="speed" data-d="10">+</button></div>
+              </div>
+              <div class="stack" style="gap:2px">
+                <span class="muted" style="font-size:12px">Flow</span>
+                <div class="stepper"><button data-tune="flow" data-d="-5">−</button><span class="v num" id="tune-flow">100%</span><button data-tune="flow" data-d="5">+</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid cols-2" style="margin-top: var(--gap)" id="spools">
+          <div class="card row between"><span class="muted">Left spool</span><b class="num" id="spool-left">–</b></div>
+          <div class="card row between"><span class="muted">Right spool</span><b class="num" id="spool-right">–</b></div>
+        </div>
+      </section>
+
+      <!-- ============================== FILES ============================== -->
+      <section class="page" id="page-files">
+        <div class="row between" style="margin-bottom:10px">
+          <div class="row" style="min-width:0">
+            <h2 style="margin:0">Files</h2>
+            <div class="seg hidden" id="file-source"></div>
+            <span class="muted num" id="files-free" style="font-size:13px"></span>
+          </div>
+          <label class="btn small" id="upload-btn">
+            <svg><use href="#i-upload"/></svg>Upload
+            <input type="file" id="upload-input" accept=".gcode,.gco,.g" hidden>
+          </label>
+          <button class="btn small hidden" id="usb-eject" data-act="usb-eject">Eject</button>
+        </div>
+        <div id="usb-bar" class="row hidden" style="margin-bottom:8px">
+          <button class="btn small" data-act="usb-up">‹ Back</button>
+          <span id="usb-path" class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        </div>
+        <div id="upload-progress" class="banner info hidden"><div class="spinner"></div><div class="text" id="upload-text"></div></div>
+        <div class="file-list" id="file-list"><div class="muted">Loading…</div></div>
+      </section>
+
+      <!-- ============================== CONTROL ============================== -->
+      <section class="page" id="page-control">
+        <div id="control-lock" class="banner info hidden"><div class="text">Movement is locked while printing. Pause the print to move the head.</div></div>
+        <div class="grid cols-2">
+          <div class="card">
+            <div class="row between"><h3 style="margin:0">Move</h3>
+              <div class="seg" id="jog-steps"><button data-step="0.1">0.1</button><button data-step="1">1</button><button data-step="10" class="on">10</button><button data-step="50">50</button></div>
+            </div>
+            <div class="row" style="gap:14px;margin-top:10px;align-items:flex-start">
+              <div class="jog">
+                <span></span><button class="btn" data-jog="y" data-dir="1"><svg><use href="#i-up"/></svg>Y</button><span></span>
+                <button class="btn" data-jog="x" data-dir="-1"><svg><use href="#i-left"/></svg>X</button>
+                <button class="btn" data-act="home-xy" title="Home X and Y"><svg><use href="#i-house"/></svg>XY</button>
+                <button class="btn" data-jog="x" data-dir="1">X<svg><use href="#i-right"/></svg></button>
+                <span></span><button class="btn" data-jog="y" data-dir="-1"><svg><use href="#i-down"/></svg>Y</button><span></span>
+              </div>
+              <div class="zcol">
+                <button class="btn" data-jog="z" data-dir="1"><svg><use href="#i-up"/></svg>Z</button>
+                <button class="btn" data-act="home-z"><svg><use href="#i-house"/></svg>Z</button>
+                <button class="btn" data-jog="z" data-dir="-1"><svg><use href="#i-down"/></svg>Z</button>
+              </div>
+            </div>
+            <div class="row wrap" style="margin-top:10px">
+              <button class="btn" data-act="home-all"><svg><use href="#i-house"/></svg>Home all</button>
+              <button class="btn" data-act="motors-off">Motors off</button>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <h3>Temperature</h3>
+              <div class="row wrap" id="preset-buttons"></div>
+            </div>
+            <div class="card">
+              <h3>Extruder</h3>
+              <div class="row wrap">
+                <div class="seg" id="tool-select"><button data-tool="0">Left</button><button data-tool="1">Right</button></div>
+                <span class="lift-only row" style="gap:6px">
+                  <button class="btn small" data-act="lift-up">Lift up</button>
+                  <button class="btn small" data-act="lift-down">Lift down</button>
+                </span>
+              </div>
+              <div class="row wrap" style="margin-top:10px">
+                <div class="seg" id="extrude-amount"><button data-amt="5">5</button><button data-amt="10" class="on">10</button><button data-amt="50">50 mm</button></div>
+                <button class="btn small" data-act="retract">Retract</button>
+                <button class="btn small primary" data-act="extrude">Extrude</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="row between"><h3 style="margin:0">Part fan</h3><span class="num muted" id="fan-value">0%</span></div>
+              <div class="seg" id="fan-steps" style="margin-top:8px"><button data-fan="0">Off</button><button data-fan="25">25</button><button data-fan="50">50</button><button data-fan="75">75</button><button data-fan="100">100%</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================== FILAMENT ============================== -->
+      <section class="page" id="page-filament">
+        <div id="op-banner" class="banner info hidden"><div class="spinner"></div><div class="text" id="op-text"></div></div>
+        <div class="row wrap" style="margin-bottom:10px">
+          <span class="muted">Material</span>
+          <div class="seg" id="material-select"></div>
+        </div>
+        <div class="grid cols-2">
+          <div class="card stack" data-side="left" data-tool="0">
+            <div class="row between"><h2 style="margin:0">Left</h2><span class="num" data-b="t0.actual">–</span></div>
+            <div class="row"><button class="btn big block" data-fil="unload">Unload</button><button class="btn big block primary" data-fil="load">Load</button></div>
+            <div class="field"><div class="lab">Runout sensor<small class="sensor-state">–</small></div><label class="switch"><input type="checkbox" data-runout="left"><span></span></label></div>
+          </div>
+          <div class="card stack" data-side="right" data-tool="1">
+            <div class="row between"><h2 style="margin:0">Right</h2><span class="num" data-b="t1.actual">–</span></div>
+            <div class="row"><button class="btn big block" data-fil="unload">Unload</button><button class="btn big block primary" data-fil="load">Load</button></div>
+            <div class="field"><div class="lab">Runout sensor<small class="sensor-state">–</small></div><label class="switch"><input type="checkbox" data-runout="right"><span></span></label></div>
+          </div>
+        </div>
+        <div class="row wrap" style="margin-top:10px">
+          <button class="btn small" data-act="check-sensors">Check sensors</button>
+          <span class="muted" style="font-size:13px">Loading heats the nozzle, pushes filament in and purges a little. Unloading pushes a bit first so the tip pulls out cleanly.</span>
+        </div>
+      </section>
+
+      <!-- ============================== CALIBRATE: bed level + Z offset ============================== -->
+      <section class="page" id="page-zoffset">
+        <div class="tabs" id="cal-tabs">
+          <button class="btn small sel" data-cal="level">Bed level</button>
+          <button class="btn small" data-cal="z">Z offset</button>
+        </div>
+
+        <div id="cal-level">
+          <div id="lv-idle" class="card stack">
+            <h2>Level the bed with its three screws</h2>
+            <div class="muted" style="font-size:14px">The printer probes the bed (auto bed leveling), then shows which screw to turn,
+              which way and how far. Turn them, probe again, and repeat until every screw shows a tick.</div>
+            <div class="field"><div class="lab">Heat the bed first<small>The bed shape changes when it is hot.</small></div>
+              <label class="switch"><input type="checkbox" id="lv-heat" checked><span></span></label></div>
+            <div class="split-edges" style="margin-top:4px">
+              <div class="row wrap">
+                <button class="btn" data-lv="teach">Screw positions…</button>
+                <button class="btn" data-lv="options">Options…</button>
+              </div>
+              <div class="row wrap">
+                <button class="btn" data-lv="saved">Use saved mesh</button>
+                <button class="btn big primary" data-lv="start">Probe the bed</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="lv-busy" class="card row hidden" style="gap:14px">
+            <div class="spinner"></div>
+            <div style="flex:1"><div id="lv-busy-text"></div><div class="muted num" id="lv-busy-time"></div></div>
+            <button class="btn" data-lv="cancel">Cancel</button>
+          </div>
+
+          <div id="lv-results" class="hidden">
+            <div class="lv-grid">
+              <div class="card lv-map" id="lv-map"></div>
+              <div class="stack" id="lv-list"></div>
+            </div>
+            <div class="split-edges" style="margin-top:10px">
+              <div class="row wrap">
+                <button class="btn" data-lv="finish">Finish</button>
+                <button class="btn" data-lv="options">Options…</button>
+                <button class="btn hidden" id="lv-again-left" data-lv="start">Probe again</button>
+              </div>
+              <div class="row wrap">
+                <button class="btn big primary" id="lv-again" data-lv="start">Probe again</button>
+                <button class="btn big ok hidden" id="lv-save" data-lv="save">Save mesh</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="lv-teach" class="card hidden">
+            <div class="row between">
+              <h2 style="margin:0">Screw positions</h2>
+              <div class="seg" id="lv-teach-pick"></div>
+            </div>
+            <div class="row" style="gap:18px;margin-top:10px;align-items:flex-start">
+              <div class="stack">
+                <div class="jog">
+                  <span></span><button class="btn" data-lvjog="y" data-dir="1"><svg><use href="#i-up"/></svg>Y</button><span></span>
+                  <button class="btn" data-lvjog="x" data-dir="-1"><svg><use href="#i-left"/></svg>X</button><span></span>
+                  <button class="btn" data-lvjog="x" data-dir="1">X<svg><use href="#i-right"/></svg></button>
+                  <span></span><button class="btn" data-lvjog="y" data-dir="-1"><svg><use href="#i-down"/></svg>Y</button><span></span>
+                </div>
+              </div>
+              <div class="stack" style="flex:1;min-width:0">
+                <div class="muted" id="lv-teach-msg"></div>
+                <div class="zread num" style="font-size:30px" id="lv-teach-pos">–</div>
+                <div class="row"><span class="muted">Step</span><div class="seg" id="lv-steps"><button data-lvstep="1">1</button><button data-lvstep="5" class="on">5</button><button data-lvstep="10">10 mm</button></div></div>
+              </div>
+            </div>
+            <div class="split-edges" style="margin-top:10px">
+              <button class="btn big" data-lv="teach_done">Done</button>
+              <button class="btn big ok" data-lv="teach_save">Save position</button>
+            </div>
+          </div>
+
+          <div id="lv-error" class="banner error hidden" style="margin-top:10px"><div class="text" id="lv-error-text"></div>
+            <button class="btn small" data-lv="finish">OK</button></div>
+        </div>
+
+        <div id="cal-z" class="hidden">
+        <div id="z-idle" class="card stack">
+          <h2>Set the nozzle height with a sheet of paper</h2>
+          <div class="steps-hint">
+            <svg class="zfig" viewBox="0 0 170 112" aria-hidden="true">
+              <path d="M70 8h30v26l-15 20-15-20z" fill="#3b4652" stroke="#9aa8b6" stroke-width="2"/>
+              <rect x="20" y="62" width="130" height="6" rx="1" fill="#e9eef3"/>
+              <rect x="8" y="70" width="154" height="16" rx="3" fill="#29313a" stroke="#303a45"/>
+              <path d="M85 56v4" stroke="#f2a93b" stroke-width="2"/>
+              <text x="152" y="60" fill="#9aa8b6" font-size="10" text-anchor="end">paper</text>
+              <text x="152" y="100" fill="#9aa8b6" font-size="10" text-anchor="end">bed</text>
+            </svg>
+            <ol class="checklist" style="margin:0">
+              <li>The printer homes and moves the nozzle to the middle of the bed, a few millimetres up.</li>
+              <li>Slide a plain sheet of printer paper under the nozzle.</li>
+              <li>Lower the nozzle in small steps until the paper drags slightly when you move it.</li>
+              <li>Save. That height becomes Z 0.</li>
+            </ol>
+          </div>
+          <div class="field"><div class="lab">Nozzle</div><div class="seg" id="z-tool"><button data-ztool="0" class="on">Left</button><button data-ztool="1">Right</button></div></div>
+          <div class="field"><div class="lab">Heat first<small>Bed and nozzle expand when hot. Recommended.</small></div><label class="switch"><input type="checkbox" id="z-heat" checked><span></span></label></div>
+          <div class="field"><div class="lab">Current offsets</div><div class="num muted" id="z-current">–</div></div>
+          <div class="edge-right"><button class="btn big primary" data-act="z-start">Start</button></div>
+        </div>
+
+        <div id="z-busy" class="card row hidden" style="gap:14px">
+          <div class="spinner"></div><div class="text" id="z-busy-text" style="flex:1"></div>
+          <button class="btn" data-act="z-cancel">Cancel</button>
+        </div>
+
+        <div id="z-adjust" class="card hidden">
+          <div class="row between">
+            <div>
+              <div class="muted" id="z-tool-label">Left nozzle</div>
+              <div class="zread num" id="z-read">–</div>
+              <div class="muted num" id="z-delta"></div>
+            </div>
+            <div class="muted" style="max-width:52%;font-size:14px" id="z-instr"></div>
+          </div>
+          <div class="zgrid" style="margin-top:12px">
+            <button class="btn" data-zstep="1"><svg><use href="#i-up"/></svg>1</button>
+            <button class="btn" data-zstep="0.1"><svg><use href="#i-up"/></svg>0.1</button>
+            <button class="btn" data-zstep="0.05"><svg><use href="#i-up"/></svg>0.05</button>
+            <button class="btn" data-zstep="0.01"><svg><use href="#i-up"/></svg>0.01</button>
+            <button class="btn" data-zstep="-1"><svg><use href="#i-down"/></svg>1</button>
+            <button class="btn" data-zstep="-0.1"><svg><use href="#i-down"/></svg>0.1</button>
+            <button class="btn" data-zstep="-0.05"><svg><use href="#i-down"/></svg>0.05</button>
+            <button class="btn" data-zstep="-0.01"><svg><use href="#i-down"/></svg>0.01</button>
+          </div>
+          <div class="split-edges" style="margin-top:12px">
+            <button class="btn big" data-act="z-cancel">Cancel</button>
+            <button class="btn big ok" data-act="z-accept">Paper drags: save</button>
+          </div>
+        </div>
+
+        <div id="z-done" class="card stack hidden">
+          <h2 id="z-done-title">Saved</h2>
+          <div id="z-done-text" class="muted"></div>
+          <div id="z-check" class="stack">
+            <div class="muted">Check other spots: the nozzle drops to Z 0 there. The paper should drag about the same everywhere. If it doesn't, run bed leveling.</div>
+            <div class="row wrap" id="z-points">
+              <button class="btn small" data-zpoint="back_left">Back left</button>
+              <button class="btn small" data-zpoint="back_right">Back right</button>
+              <button class="btn small" data-zpoint="center">Centre</button>
+              <button class="btn small" data-zpoint="front_left">Front left</button>
+              <button class="btn small" data-zpoint="front_right">Front right</button>
+            </div>
+          </div>
+          <div class="edge-right"><button class="btn big primary" data-act="z-finish">Done</button></div>
+        </div>
+
+        <div id="z-error" class="banner error hidden"><div class="text" id="z-error-text"></div><button class="btn small" data-act="z-reset">OK</button></div>
+        </div>
+      </section>
+
+      <!-- ============================== SETTINGS ============================== -->
+      <section class="page" id="page-settings">
+        <div class="tabs" id="settings-tabs">
+          <button class="btn small sel" data-tab="general">General</button>
+          <button class="btn small" data-tab="wifi">Wi-Fi</button>
+          <button class="btn small" data-tab="recovery">Power loss</button>
+          <button class="btn small" data-tab="scales">Scales</button>
+          <button class="btn small" data-tab="leds">LEDs</button>
+          <button class="btn small" data-tab="connection">Connection</button>
+          <button class="btn small" data-tab="console">Console</button>
+          <button class="btn small" data-tab="firmware">Firmware</button>
+          <button class="btn small" data-tab="system">System</button>
+        </div>
+        <div class="tab" id="tab-general"></div>
+        <div class="tab hidden" id="tab-wifi"></div>
+        <div class="tab hidden" id="tab-recovery"></div>
+        <div class="tab hidden" id="tab-scales"></div>
+        <div class="tab hidden" id="tab-leds"></div>
+        <div class="tab hidden" id="tab-connection"></div>
+        <div class="tab hidden" id="tab-console">
+          <div class="log" id="console-log"></div>
+          <div class="row wrap" style="margin-top:8px">
+            <input type="text" id="console-input" placeholder="G-code, e.g. M114" style="flex:1" autocomplete="off" spellcheck="false">
+            <button class="btn primary" data-act="console-send">Send</button>
+          </div>
+          <div class="row wrap" style="margin-top:8px" id="console-quick">
+            <button class="btn small" data-gcode="M114">Position</button>
+            <button class="btn small" data-gcode="M105">Temps</button>
+            <button class="btn small" data-gcode="M503">Settings</button>
+            <button class="btn small" data-gcode="M206 I">Right Z offset</button>
+            <button class="btn small" data-gcode="M64">Sensors</button>
+            <button class="btn small" data-gcode="M420 V">Bed mesh</button>
+            <button class="btn small" data-gcode="G29">Level bed (G29)</button>
+            <button class="btn small" data-gcode="M500">Save to EEPROM</button>
+          </div>
+        </div>
+        <div class="tab hidden" id="tab-firmware"></div>
+        <div class="tab hidden" id="tab-system"></div>
+      </section>
+    </div>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

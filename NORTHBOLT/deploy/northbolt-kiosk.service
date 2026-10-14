@@ -1,0 +1,30 @@
+[Unit]
+Description=NORTHBOLT touch screen (Chromium in the cage kiosk compositor on tty1)
+After=systemd-user-sessions.service plymouth-quit-wait.service northbolt.service
+Wants=dbus.socket systemd-logind.service northbolt.service
+After=dbus.socket systemd-logind.service
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+ConditionPathExists=/dev/tty1
+
+[Service]
+Type=simple
+User=@USER@
+# Wait for the local server, then show the UI full screen with no browser chrome.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do curl -fs http://127.0.0.1:@PORT@/api/version >/dev/null && exit 0; sleep 1; done; exit 0'
+ExecStart=/usr/bin/cage -s -- @BROWSER@ --kiosk --noerrdialogs --disable-infobars --incognito \
+  --no-first-run --disable-pinch --overscroll-history-navigation=0 --disable-features=Translate \
+  --check-for-update-interval=31536000 --password-store=basic http://127.0.0.1:@PORT@/
+Restart=always
+RestartSec=3
+UtmpIdentifier=tty1
+UtmpMode=user
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+PAMName=cage
+
+[Install]
+WantedBy=graphical.target
