@@ -4416,8 +4416,16 @@ inline void gcode_G28(const bool always_home_all) {
 
 #ifdef MOVING_EXTRUDER
     Extruder_Up();      //Skriware
+    // Skriware: G28 switches to T0 without extruder_swap(), so if T1 was active, home_offset[Z]
+    // kept T1's offset (home_offset_E1) and the next Z home used it for T0: the left nozzle then
+    // printed too low or too high by the difference. Undo T1's offset the way extruder_swap() does,
+    // without moving.
+    if (extruder_type != 0 && active_extruder != 0) {
+      current_position[Z_AXIS] += home_offset_E0 - home_offset[Z_AXIS];
+      home_offset[Z_AXIS] = home_offset_E0;
+    }
 #endif
-	tool_change(0,0.0,true);// Skriware            
+	tool_change(0,0.0,true);// Skriware
 
   #if ENABLED(DEBUG_LEVELING_FEATURE)
     if (DEBUGGING(LEVELING)) {

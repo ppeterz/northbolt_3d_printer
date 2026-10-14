@@ -4,18 +4,27 @@
 
 /*******************************THERMAL PROTECTION *******************************************/
 
+/*
+ * Safety review (NORTHBOLT):
+ *  - The heat-up check (WATCH_*) is what catches a thermistor that has fallen out of the heater
+ *    block: the heater runs flat out while the reading barely moves. 1 C in 45 s let that pass,
+ *    so it is back to Marlin's 2 C in 20 s for the hotends and 2 C in 60 s for the bed.
+ *  - Runaway hysteresis was 5 C until the 2021 release raised it to 12 C, probably because 5 C
+ *    gave false alarms (part fan at full blowing on the nozzle). 8 C is a middle ground. If you
+ *    get "Thermal Runaway" stops with the fan at 100 % and a healthy hotend, try 10.
+ */
 #if ENABLED(THERMAL_PROTECTION_HOTENDS)
-  #define THERMAL_PROTECTION_PERIOD 45        // Seconds
-  #define THERMAL_PROTECTION_HYSTERESIS 12     // Degrees Celsius
-  #define WATCH_TEMP_PERIOD 45                // Seconds
-  #define WATCH_TEMP_INCREASE 1               // Degrees Celsius
+  #define THERMAL_PROTECTION_PERIOD 40        // Seconds (was 45)
+  #define THERMAL_PROTECTION_HYSTERESIS 8     // Degrees Celsius (was 12)
+  #define WATCH_TEMP_PERIOD 20                // Seconds (was 45)
+  #define WATCH_TEMP_INCREASE 2               // Degrees Celsius (was 1)
 #endif
 
 #if ENABLED(THERMAL_PROTECTION_BED)
   #define THERMAL_PROTECTION_BED_PERIOD 45    // Seconds
   #define THERMAL_PROTECTION_BED_HYSTERESIS 2 // Degrees Celsius
-  #define WATCH_BED_TEMP_PERIOD 90                // Seconds
-  #define WATCH_BED_TEMP_INCREASE 1               // Degrees Celsius
+  #define WATCH_BED_TEMP_PERIOD 60                // Seconds (was 90)
+  #define WATCH_BED_TEMP_INCREASE 2               // Degrees Celsius (was 1)
 #endif
 
 #define AUTOTEMP

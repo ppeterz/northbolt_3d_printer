@@ -599,16 +599,25 @@ void Temperature::_temp_error(const int8_t e, const char * const serial_msg, con
   #endif
 }
 
+// Skriware: these used to sprintf the message into RAM and pass it to _temp_error, which prints it
+// with serialprintPGM (it reads flash), so the reported reason came out as garbage. Print the
+// Skriware-style line ourselves, then hand _temp_error a message that really is in flash.
 void Temperature::max_temp_error(const int8_t e) {
-  char buff[50] = "";
-  sprintf(buff,"%s %d",MSG_ERR_MAXTEMP,e);
-  _temp_error(e, buff, buff);
+  if (IsRunning()) {
+    SERIAL_ERROR_START();
+    SERIAL_ERRORPGM(MSG_ERR_MAXTEMP " ");
+    SERIAL_ERRORLN((int)e);
+  }
+  _temp_error(e, PSTR(MSG_T_MAXTEMP), TEMP_ERR_PSTR(MSG_ERR_MAXTEMP, e));
 }
 
 void Temperature::min_temp_error(const int8_t e) {
-   char buff[50] = "";
-  sprintf(buff,"%s %d",MSG_ERR_MINTEMP,e);
-  _temp_error(e, buff, buff);
+  if (IsRunning()) {
+    SERIAL_ERROR_START();
+    SERIAL_ERRORPGM(MSG_ERR_MINTEMP " ");
+    SERIAL_ERRORLN((int)e);
+  }
+  _temp_error(e, PSTR(MSG_T_MINTEMP), TEMP_ERR_PSTR(MSG_ERR_MINTEMP, e));
 }
 
 float Temperature::get_pid_output(const int8_t e) {
@@ -797,11 +806,15 @@ void Temperature::manage_heater() {
     #if WATCH_HOTENDS
       // Make sure temperature is increasing
       if (watch_heater_next_ms[e] && ELAPSED(ms, watch_heater_next_ms[e])) { // Time to check this extruder?
-        if (degHotend(e) < watch_target_temp[e]){ 
+        if (degHotend(e) < watch_target_temp[e]){
                                       // Failed to increase enough?
-          char buff[50] = "";
-          sprintf(buff,"Heating Error. Heater ID: %d",e);
-          _temp_error(e, buff, TEMP_ERR_PSTR(MSG_HEATING_FAILED_LCD, e));
+          // Keep the line Skriware's host software looks for, printed from RAM correctly.
+          if (IsRunning()) {
+            SERIAL_ERROR_START();
+            SERIAL_ERRORPGM("Heating Error. Heater ID: ");
+            SERIAL_ERRORLN((int)e);
+          }
+          _temp_error(e, PSTR(MSG_T_HEATING_FAILED), TEMP_ERR_PSTR(MSG_HEATING_FAILED_LCD, e));
         }else{                                                                 // Start again if the target is still far off
           start_watching_heater(e);
         }
@@ -813,7 +826,7 @@ void Temperature::manage_heater() {
       if (ABS(current_temperature[0] - redundant_temperature) > MAX_REDUNDANT_TEMP_SENSOR_DIFF)
         _temp_error(0, "Heater switched off. Temperature difference between temp sensors is too high !", PSTR(MSG_ERR_REDUNDANT_TEMP));
     #endif
-    if(current_temperature[e] > HEATER_0_MAXTEMP)max_temp_error(e);  //Skriware
+    if (current_temperature[e] > maxttemp[e]) max_temp_error(e);  //Skriware: each hotend's own limit (was HEATER_0_MAXTEMP for all)
   } // HOTEND_LOOP
 
   #if HAS_AUTO_FAN

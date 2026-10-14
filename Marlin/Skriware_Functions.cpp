@@ -43,6 +43,43 @@ bool checkTestPin(int pin){
           }
   }
 #ifdef MOVING_EXTRUDER
+// Wait while still running idle(): heaters stay managed and the watchdog stays fed.
+// (The old code used PENDING(millis(), extruder_change_time_offset), which compares the clock
+// with a fixed 500 and so stopped waiting at all half a second after power-on.)
+static void wait_idle_ms(const millis_t ms) {
+  const millis_t until = millis() + ms;
+  while (PENDING(millis(), until)) idle();
+}
+
+// Send one command to the extruder lift board over OneWire. A few tries cover a glitchy read;
+// returns false if the board never answers. (The old loops retried forever without calling idle(),
+// so a loose cable made the watchdog reset the board 4 s later with no explanation.)
+#define LIFT_BOARD_TRIES 5
+static bool lift_board_send(const byte cmd) {
+  for (byte attempt = 0; attempt < LIFT_BOARD_TRIES; attempt++) {
+    byte addr[8];
+    if (ds->search(addr) && addr[0] == 0x68) {
+      ds->reset();
+      ds->select(addr);
+      ds->write(cmd);
+      ds->reset_search();
+      return true;
+    }
+    ds->reset_search();
+    SERIAL_ECHOLN("EXTRUDER BOARD CONNECTION FAIL!");
+    wait_idle_ms(200);
+  }
+  return false;
+}
+
+// A nozzle left in the wrong position would crash into the print, so stop everything
+// (heaters and motors off) and say why. The board needs a reset afterwards.
+static void lift_board_failed() {
+  SERIAL_ERROR_START();
+  SERIAL_ERRORLNPGM("Extruder lift board not responding. Check its cable.");
+  kill(PSTR("Extruder lift board"));
+}
+
 void Extruder_Up(){
       if(extruder_type == 3){
         servo[0].write(servo_up_pos);
@@ -83,28 +120,8 @@ void Extruder_Up(){
          #endif
          extruder_up = true;
       }else if(extruder_type != 0 && extruder_type != 4){
-        bool done = false;
-      while(!done){
-      byte addr[8];
-      if ( !ds->search(addr)) {
-        ds->reset_search();
-        SERIAL_ECHOLN("EXTRUDER BOARD CONNECTION FAIL!");
-        
-        while (PENDING(millis(), extruder_change_time_offset )) idle();
-      }
-      if(addr[0] == 0x68){
-        ds->reset();
-        ds->select(addr);
-        ds->write(0xCC);
-        ds->reset_search();
-        done = true;
-      }else{
-        SERIAL_ECHOLN("EXTRUDER BOARD CONNECTION FAIL!");
-         
-        while (PENDING(millis(), extruder_change_time_offset )) idle();
-      }
-    }
-     while (PENDING(millis(), extruder_change_time_offset )) idle();
+        if (!lift_board_send(0xCC)) return lift_board_failed();
+        wait_idle_ms(extruder_change_time_offset);   // let the lift finish moving (M80 O sets this)
     }
 }
 
@@ -148,28 +165,8 @@ void Extruder_Down(){
          #endif
           extruder_up = false;
      }else if(extruder_type != 0 && extruder_type != 4){
-       bool done = false;
-    while(!done){
-     byte addr[8];
-      if ( !ds->search(addr)) {
-        ds->reset_search();
-        SERIAL_ECHOLN("EXTRUDER BOARD CONNECTION FAIL!");
-         
-        while (PENDING(millis(), extruder_change_time_offset )) idle();
-      }
-      if(addr[0] == 0x68){
-        ds->reset();
-        ds->select(addr);
-        ds->write(0xBB);
-        ds->reset_search();
-        done = true;
-      }else{
-        SERIAL_ECHOLN("EXTRUDER BOARD CONNECTION FAIL!");
-         
-        while (PENDING(millis(), extruder_change_time_offset )) idle();
-      }
-    }
-     while (PENDING(millis(), extruder_change_time_offset )) idle();
+       if (!lift_board_send(0xBB)) return lift_board_failed();
+       wait_idle_ms(extruder_change_time_offset);   // let the lift finish moving (M80 O sets this)
     }
 }
 
@@ -184,7 +181,8 @@ void extruder_swap(uint8_t tmp_extruder,uint8_t active){
         prepare_move_to_destination();
         planner.synchronize();
         Extruder_Down();
-        while (PENDING(millis(), extruder_change_time_offset )) idle();
+        if (!IsRunning()) return;                     // the lift board failed and the printer stopped
+        wait_idle_ms(extruder_change_time_offset);    // lowered nozzle settles before Z comes back down
         current_position[Z_AXIS] = tmp_Z+3.0 + home_offset_E1 - home_offset[Z_AXIS];
         home_offset[Z_AXIS] = home_offset_E1;
         SYNC_PLAN_POSITION_KINEMATIC();
@@ -197,8 +195,8 @@ void extruder_swap(uint8_t tmp_extruder,uint8_t active){
     if(extruder_type != 0 && tmp_extruder == 0 && extruder_change){
        planner.synchronize();
        Extruder_Up();
-       while (PENDING(millis(), extruder_change_time_offset )) idle();
-       delay(extruder_change_time_offset);
+       if (!IsRunning()) return;                     // the lift board failed and the printer stopped
+       wait_idle_ms(extruder_change_time_offset);    // was a blocking delay() of the same length
        current_position[Z_AXIS] += home_offset_E0 - home_offset[Z_AXIS];
        home_offset[Z_AXIS] = home_offset_E0;
        SYNC_PLAN_POSITION_KINEMATIC();
@@ -352,8 +350,8 @@ void binary_sensor_check(){
           Last_runout_Signal_E1 = millis();
           }
       }
-    }else if(digitalRead(SKRIWARE_FILAMENT_RUNOUT_SENSOR_PIN_E0) == HIGH){
-          Last_runout_Signal_E1 = 0;
+    }else if(digitalRead(SKRIWARE_FILAMENT_RUNOUT_SENSOR_PIN_E1) == HIGH){   // was PIN_E0: the right sensor's
+          Last_runout_Signal_E1 = 0;                                         // debounce never reset when filament came back
     
     }
   }

@@ -69,6 +69,10 @@
 
 volatile bool breathing = false;
 volatile bool flashing = false;
+// Power-off (0xDD) is requested from the I2C interrupt but carried out in loop(): its ~20 s
+// LED countdown uses delay(), which doesn't work inside an interrupt.
+volatile bool powerOffRequested = false;
+volatile byte powerOffR, powerOffG, powerOffB;
 volatile byte Rbreath;
 volatile byte Gbreath;
 volatile byte Bbreath;
@@ -137,8 +141,26 @@ void setup() {
   
 }
 
+void powerOffSequence() {
+  centerLightDown();
+  for(int i = NLED_LEFT ; i > -1; i--){
+    delay(1500);   // about 20 s in total: the Raspberry Pi shuts down meanwhile
+    lightsUpToDOWN(2,i,powerOffR,powerOffG,powerOffB);
+    lightsUpToDOWN(0,i,powerOffR,powerOffG,powerOffB);
+  }
+  digitalWrite(POWERPin,HIGH);
+  digitalWrite(SlaveFlagPin,LOW);
+  MKSPower = false;
+  flashing = false;
+  breathing = false;
+}
+
 void loop() {
-  
+  if(powerOffRequested){
+    powerOffRequested = false;
+    powerOffSequence();
+  }
+
   if(breathing) {
     attachInterrupt(digitalPinToInterrupt(PowerButtonInterruptPin),PowerButtonPressed,HIGH);
     breath();
@@ -178,17 +200,13 @@ void handle_message(byte frame[5]) {
       control_lights(frame[1], frame[2], frame[3], frame[4]);
       break;
     case 0xDD:
-        centerLightDown();
-      for(int i = NLED_LEFT ; i > -1; i--){
-        delay(1500);
-         lightsUpToDOWN(2,i,frame[2],frame[3],frame[4]);
-         lightsUpToDOWN(0,i,frame[2],frame[3],frame[4]);
-      }
-      digitalWrite(POWERPin,HIGH);
-      digitalWrite(SlaveFlagPin,LOW);
-      MKSPower = false;
+      // Runs in loop(), not here: delay() inside this I2C interrupt doesn't work.
+      powerOffR = frame[2];
+      powerOffG = frame[3];
+      powerOffB = frame[4];
       flashing = false;
       breathing = false;
+      powerOffRequested = true;
       break;
     case 0xF0:
       digitalWrite(SlaveFlagPin,HIGH);
@@ -300,8 +318,12 @@ long measure_weight1() {
   long WL = 0;
   long weightLT[5];
   int i = 0;
+  unsigned long started = millis();
   while(true){
     if(digitalRead(PowerButtonInterruptPin) == HIGH)PowerButtonPressed();
+    // A missing or broken scale never gets ready: give up (keep the last reading) instead of
+    // blocking loop() forever, which would also stop power-off from ever running.
+    if(powerOffRequested || millis() - started > 1500) return LeftRead;
     if(LeftScale.is_ready()) {
       weightLT[i] = LeftScale.read_average(2);
       i++;
@@ -337,8 +359,10 @@ long measure_weight2() {
   long WR = 0;
   long weightRT[5];
   int i = 0;
+  unsigned long started = millis();
   while(true){
     if(digitalRead(PowerButtonInterruptPin) == HIGH)PowerButtonPressed();
+    if(powerOffRequested || millis() - started > 1500) return RightRead;   // see measure_weight1()
     if(RightScale.is_ready()) {
       weightRT[i] = RightScale.read_average(2);
       i++;
@@ -373,14 +397,16 @@ long measure_weight2() {
 // function that executes whenever data is received from master
 void receiveEvent(int howMany) {
   int counter = 0;
-  while (Wire.available()) { // loop through all but the last
-    frame[counter] = Wire.read();
+  while (Wire.available()) {
+    byte b = Wire.read();
+    // frame[] holds 6 bytes. Writing past it used to overwrite other variables (power state, LED flags).
+    if (counter < 6) frame[counter] = b;
     #ifdef DEBUG
-    Serial.print(counter); Serial.print(" : ");Serial.println(frame[counter]);
+    Serial.print(counter); Serial.print(" : ");Serial.println(b);
     #endif
     counter++;
   }
-  handle_message(frame);
+  if (counter == 6) handle_message(frame);   // every valid command is exactly 6 bytes
 }
 
 // function that executes whenever data is requested by master
