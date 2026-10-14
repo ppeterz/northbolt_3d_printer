@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#0f1215">
+<meta name="theme-color" content="#090b0f">
 <title>NORTHBOLT</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -28,6 +28,18 @@
     <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
     <symbol id="i-wifi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+    <symbol id="i-nozzle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10v6H7z"/><path d="M9 9v3h6V9"/><path d="M10 12l2 4 2-4"/><path d="M8 20h8"/></symbol>
+    <symbol id="i-bed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17h18v3H3z"/><path d="M8 13c-1-1.4 1-2.6 0-4M12 13c-1-1.4 1-2.6 0-4M16 13c-1-1.4 1-2.6 0-4"/></symbol>
+    <symbol id="i-fan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.6"/><path d="M12 10.4c0-4 1-6.4 3.4-6.4 2 0 2.6 2.6.6 4.4-1.3 1.2-2.6 1.6-4 2zM13.6 12c4 0 6.4 1 6.4 3.4 0 2-2.6 2.6-4.4.6-1.2-1.3-1.6-2.6-2-4zM12 13.6c0 4-1 6.4-3.4 6.4-2 0-2.6-2.6-.6-4.4 1.3-1.2 2.6-1.6 4-2zM10.4 12c-4 0-6.4-1-6.4-3.4 0-2 2.6-2.6 4.4-.6 1.2 1.3 1.6 2.6 2 4z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+    <symbol id="i-height" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16M8 8l4-4 4 4M8 16l4 4 4-4"/></symbol>
+    <symbol id="i-speed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 18a9 9 0 1 1 15 0"/><path d="M12 14l4-5"/><circle cx="12" cy="14" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-3.9 0-6.5-2.6-6.5-6 0-3.6 3-5.4 3.5-9 2.5 1.3 3.5 3.5 3.5 5 1-.6 1.6-1.6 1.8-2.8 2 1.6 4.2 4 4.2 6.8 0 3.4-2.6 6-6.5 6z"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8.5 4.8v9.4L12 21.5l-8.5-4.8V7.3z"/><path d="M3.5 7.3L12 12l8.5-4.7M12 12v9.5"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v5h-5"/><path d="M19.4 10A8 8 0 1 0 20 14"/></symbol>
+    <linearGradient id="g-accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f8cff"/><stop offset="1" stop-color="#20d5ec"/></linearGradient>
   </defs>
 </svg>
 
@@ -45,12 +57,13 @@
 
   <div id="main">
     <header id="topbar">
-      <span class="brand" aria-label="NORTHBOLT"><svg><use href="#i-bolt"/></svg>NORTHBOLT</span>
+      <span class="brand" aria-label="NORTHBOLT"><span class="brand-mark"><svg><use href="#i-bolt"/></svg></span><span>NORTHBOLT</span></span>
       <span id="status-pill" class="pill">Connecting</span>
       <span id="top-temps" class="num"></span>
       <span class="spacer"></span>
       <span id="clock" class="num"></span>
-      <button id="estop" title="Emergency stop">STOP</button>
+      <button id="estop" title="Emergency stop"><svg><use href="#i-stop"/></svg>STOP</button>
+      <div id="topline"><div></div></div>
     </header>
 
     <div id="content">
@@ -64,72 +77,96 @@
           <button class="btn small warn" data-act="recovery-resume">Resume…</button>
         </div>
 
-        <div class="grid cols-3" style="margin-bottom: var(--gap)">
-          <div class="card temp-tile" data-heater="t0" id="tile-t0">
-            <div class="label"><i style="background:var(--left)"></i>Left nozzle</div>
-            <div class="value num"><span data-b="t0.actual">–</span><small>°C</small></div>
-            <div class="target num" data-b="t0.target">off</div>
-            <div class="heatbar"></div>
-          </div>
-          <div class="card temp-tile" data-heater="t1" id="tile-t1">
-            <div class="label"><i style="background:var(--right)"></i>Right nozzle</div>
-            <div class="value num"><span data-b="t1.actual">–</span><small>°C</small></div>
-            <div class="target num" data-b="t1.target">off</div>
-            <div class="heatbar"></div>
-          </div>
-          <div class="card temp-tile" data-heater="bed" id="tile-bed">
-            <div class="label"><i style="background:var(--bed)"></i>Bed</div>
-            <div class="value num"><span data-b="bed.actual">–</span><small>°C</small></div>
-            <div class="target num" data-b="bed.target">off</div>
-            <div class="heatbar"></div>
-          </div>
-        </div>
+        <div class="home">
+          <div class="card hero" id="job-card">
+            <!-- nothing printing -->
+            <div class="hero-idle" id="hero-idle">
+              <div class="idle-mark"><svg><use href="#i-bolt"/></svg></div>
+              <div class="idle-title" id="idle-title">Ready to print</div>
+              <div class="muted" id="idle-sub">Pick a model stored on the printer or a USB drive, or send one from your slicer.</div>
+              <div class="quick">
+                <button class="qbtn primary" id="btn-choose" data-goto="files"><svg><use href="#i-files"/></svg>Print a file</button>
+                <button class="qbtn" id="btn-preheat" data-act="preheat"><svg><use href="#i-flame"/></svg>Preheat</button>
+                <button class="qbtn" data-goto="filament"><svg><use href="#i-spool"/></svg>Filament</button>
+                <button class="qbtn" data-goto="zoffset"><svg><use href="#i-z"/></svg>Calibrate</button>
+              </div>
+            </div>
 
-        <div class="card" id="job-card">
-          <div class="job">
-            <div id="job-thumb" class="thumb empty">No file</div>
-            <div>
-              <div class="row between">
-                <div class="job-name" id="job-name">Ready to print</div>
-                <span class="muted" id="job-state"></span>
+            <!-- printing, paused or just ended -->
+            <div class="hero-job hidden" id="hero-job">
+              <div class="hero-head">
+                <span class="chip" id="job-state">Printing</span>
+                <div class="job-name" id="job-name"></div>
               </div>
-              <div class="row between" style="align-items:flex-end">
-                <div class="job-pct num" id="job-pct"></div>
-                <div class="muted num" id="job-eta"></div>
+              <div class="hero-main">
+                <div class="ring-wrap" id="job-ring">
+                  <svg class="ring" viewBox="0 0 120 120"><circle class="ring-track" cx="60" cy="60" r="54"/><circle class="ring-fill" cx="60" cy="60" r="54"/></svg>
+                  <div id="job-thumb" class="ring-thumb empty" data-file=""><svg><use href="#i-cube"/></svg></div>
+                  <div class="ring-pct num" id="job-pct">0%</div>
+                </div>
+                <div class="hero-info">
+                  <div class="time-block">
+                    <div class="k-label" id="job-time-label">Remaining</div>
+                    <div class="big-time num" id="job-remaining">–</div>
+                    <div class="eta num" id="job-eta"></div>
+                  </div>
+                  <div class="stats">
+                    <div class="stat"><svg><use href="#i-layers"/></svg><div><div class="k">Layer</div><div class="v num" id="job-layer">–</div></div></div>
+                    <div class="stat"><svg><use href="#i-height"/></svg><div><div class="k">Height</div><div class="v num" id="job-z">–</div></div></div>
+                    <div class="stat"><svg><use href="#i-clock"/></svg><div><div class="k">Elapsed</div><div class="v num" id="job-elapsed">–</div></div></div>
+                    <button class="stat tap" id="job-tune" data-act="tune"><svg><use href="#i-speed"/></svg><div><div class="k">Speed</div><div class="v num" id="job-speed">100%</div></div></button>
+                  </div>
+                </div>
               </div>
-              <div class="bar" id="job-bar"><div></div></div>
-              <div class="stats">
-                <div class="stat"><div class="k">Layer</div><div class="v num" id="job-layer">–</div></div>
-                <div class="stat"><div class="k">Height</div><div class="v num" id="job-z">–</div></div>
-                <div class="stat"><div class="k">Elapsed</div><div class="v num" id="job-elapsed">–</div></div>
-                <div class="stat"><div class="k">Left</div><div class="v num" id="job-remaining">–</div></div>
+              <div id="job-reason" class="banner warning hidden"></div>
+              <div class="split-edges hero-actions">
+                <div class="row">
+                  <button class="btn big warn hidden" id="btn-pause" data-act="pause"><svg><use href="#i-pause"/></svg>Pause</button>
+                  <button class="btn big ok hidden" id="btn-resume" data-act="resume"><svg><use href="#i-play"/></svg>Resume</button>
+                  <button class="btn big hidden" id="btn-filament" data-goto="filament"><svg><use href="#i-spool"/></svg>Filament</button>
+                  <button class="btn big hidden" id="btn-done" data-act="job-done">Done</button>
+                </div>
+                <div class="row">
+                  <button class="btn big danger-ghost hidden" id="btn-cancel" data-act="cancel"><svg><use href="#i-stop"/></svg>Cancel</button>
+                  <button class="btn big primary hidden" id="btn-again" data-act="print-again"><svg><use href="#i-redo"/></svg>Print again</button>
+                </div>
               </div>
             </div>
           </div>
-          <div id="job-reason" class="banner warning hidden" style="margin:12px 0 0"></div>
-          <div class="row wrap" style="margin-top:12px" id="job-actions">
-            <button class="btn big primary" id="btn-choose" data-goto="files"><svg><use href="#i-files"/></svg>Choose a file</button>
-            <button class="btn big warn hidden" id="btn-pause" data-act="pause"><svg><use href="#i-pause"/></svg>Pause</button>
-            <button class="btn big ok hidden" id="btn-resume" data-act="resume"><svg><use href="#i-play"/></svg>Resume</button>
-            <button class="btn big hidden" id="btn-cancel" data-act="cancel"><svg><use href="#i-stop"/></svg>Cancel</button>
-            <button class="btn big hidden" id="btn-filament" data-goto="filament"><svg><use href="#i-spool"/></svg>Filament</button>
-            <span class="spacer"></span>
-            <div class="row hidden" id="job-tune">
-              <div class="stack" style="gap:2px">
-                <span class="muted" style="font-size:12px">Speed</span>
-                <div class="stepper"><button data-tune="speed" data-d="-10">−</button><span class="v num" id="tune-speed">100%</span><button data-tune="speed" data-d="10">+</button></div>
+
+          <div class="side">
+            <div class="card gauge" data-heater="t0" id="tile-t0">
+              <div class="g-dial"><svg class="arc" viewBox="0 0 52 52"><circle class="g-track" cx="26" cy="26" r="22"/><circle class="g-fill" cx="26" cy="26" r="22"/></svg><div class="g-icon"><svg><use href="#i-nozzle"/></svg></div></div>
+              <div class="g-body">
+                <div class="g-label"><i style="background:var(--left)"></i>Left nozzle<span class="tag active">Active</span></div>
+                <div class="g-val num"><span data-b="t0.actual">–</span><small>°C</small></div>
+                <div class="g-target num" data-b="t0.target">off</div>
               </div>
-              <div class="stack" style="gap:2px">
-                <span class="muted" style="font-size:12px">Flow</span>
-                <div class="stepper"><button data-tune="flow" data-d="-5">−</button><span class="v num" id="tune-flow">100%</span><button data-tune="flow" data-d="5">+</button></div>
+            </div>
+            <div class="card gauge" data-heater="t1" id="tile-t1">
+              <div class="g-dial"><svg class="arc" viewBox="0 0 52 52"><circle class="g-track" cx="26" cy="26" r="22"/><circle class="g-fill" cx="26" cy="26" r="22"/></svg><div class="g-icon"><svg><use href="#i-nozzle"/></svg></div></div>
+              <div class="g-body">
+                <div class="g-label"><i style="background:var(--right)"></i>Right nozzle<span class="tag active">Active</span></div>
+                <div class="g-val num"><span data-b="t1.actual">–</span><small>°C</small></div>
+                <div class="g-target num" data-b="t1.target">off</div>
+              </div>
+            </div>
+            <div class="card gauge" data-heater="bed" id="tile-bed">
+              <div class="g-dial"><svg class="arc" viewBox="0 0 52 52"><circle class="g-track" cx="26" cy="26" r="22"/><circle class="g-fill" cx="26" cy="26" r="22"/></svg><div class="g-icon"><svg><use href="#i-bed"/></svg></div></div>
+              <div class="g-body">
+                <div class="g-label"><i style="background:var(--bed)"></i>Bed</div>
+                <div class="g-val num"><span data-b="bed.actual">–</span><small>°C</small></div>
+                <div class="g-target num" data-b="bed.target">off</div>
+              </div>
+            </div>
+            <div class="card side-mini">
+              <div class="row between"><span class="row muted" style="gap:6px"><svg><use href="#i-fan"/></svg>Part fan</span><b class="num" id="home-fan">0%</b></div>
+              <div class="stack" style="gap:6px" id="spools">
+                <div class="row between"><span class="row muted" style="gap:6px"><svg><use href="#i-spool"/></svg>Left spool</span><b class="num" id="spool-left">–</b></div>
+                <div class="row between"><span class="row muted" style="gap:6px"><svg><use href="#i-spool"/></svg>Right spool</span><b class="num" id="spool-right">–</b></div>
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="grid cols-2" style="margin-top: var(--gap)" id="spools">
-          <div class="card row between"><span class="muted">Left spool</span><b class="num" id="spool-left">–</b></div>
-          <div class="card row between"><span class="muted">Right spool</span><b class="num" id="spool-right">–</b></div>
         </div>
       </section>
 
@@ -220,12 +257,12 @@
         </div>
         <div class="grid cols-2">
           <div class="card stack" data-side="left" data-tool="0">
-            <div class="row between"><h2 style="margin:0">Left</h2><span class="num" data-b="t0.actual">–</span></div>
+            <div class="row between"><h2 class="row" style="margin:0;gap:8px"><svg style="width:22px;height:22px;color:var(--left)"><use href="#i-spool"/></svg>Left</h2><span class="muted num"><b class="num" style="color:var(--text)" data-b="t0.actual">–</b> °C</span></div>
             <div class="row"><button class="btn big block" data-fil="unload">Unload</button><button class="btn big block primary" data-fil="load">Load</button></div>
             <div class="field"><div class="lab">Runout sensor<small class="sensor-state">–</small></div><label class="switch"><input type="checkbox" data-runout="left"><span></span></label></div>
           </div>
           <div class="card stack" data-side="right" data-tool="1">
-            <div class="row between"><h2 style="margin:0">Right</h2><span class="num" data-b="t1.actual">–</span></div>
+            <div class="row between"><h2 class="row" style="margin:0;gap:8px"><svg style="width:22px;height:22px;color:var(--right)"><use href="#i-spool"/></svg>Right</h2><span class="muted num"><b class="num" style="color:var(--text)" data-b="t1.actual">–</b> °C</span></div>
             <div class="row"><button class="btn big block" data-fil="unload">Unload</button><button class="btn big block primary" data-fil="load">Load</button></div>
             <div class="field"><div class="lab">Runout sensor<small class="sensor-state">–</small></div><label class="switch"><input type="checkbox" data-runout="right"><span></span></label></div>
           </div>

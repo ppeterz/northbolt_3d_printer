@@ -91,6 +91,7 @@ systemctl enable --now northbolt.service
 
 if [ "$KIOSK" -eq 1 ]; then
   apt-get install -y cage curl
+  apt-get install -y fonts-inter || echo "fonts-inter not available, the screen uses the default font"
   apt-get install -y chromium || apt-get install -y chromium-browser
   BROWSER="$(command -v chromium || command -v chromium-browser)"
   cat > /etc/pam.d/cage <<EOF

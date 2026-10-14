@@ -17,8 +17,9 @@ let system = null;
 let page = 'home';
 const ui = {
   jogStep: 10, extrudeAmt: 10, zTool: 0, material: 0, tab: 'general', cal: 'level', lvStep: 5, source: 'printer', usbPath: '', knownDrives: null,
-  shownRecovery: null, powerModal: null, zErrorSeen: null, presetsSig: '', materialSig: '',
+  shownRecovery: null, powerModal: null, zErrorSeen: null, presetsSig: '', materialSig: '', doneJob: '',
 };
+try { ui.doneJob = localStorage.getItem('northbolt-done') || ''; } catch (e) { /* ignore */ }
 
 // ------------------------------------------------------------------ helpers
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -595,18 +596,18 @@ async function loadUsb() {
   $('[data-act="usb-up"]').disabled = !usbListing.path;
   list.innerHTML = '';
   if (!usbListing.entries.length) {
-    list.innerHTML = '<div class="card muted">No G-code files or folders here.</div>';
+    list.innerHTML = '<div class="card muted files-empty">No G-code files or folders here.</div>';
     return;
   }
   usbListing.entries.forEach((e, i) => {
     if (e.type === 'dir') {
-      list.appendChild(el(`<div class="file" data-usb="${i}"><div class="ph folder"><svg><use href="#i-files"/></svg></div>
-        <div style="min-width:0"><div class="name">${esc(e.name)}</div><div class="meta">Folder</div></div><span class="muted">›</span></div>`));
+      list.appendChild(fileCard(`data-usb="${i}"`, '<svg><use href="#i-files"/></svg>', e.name, '<span>Folder</span>', 'folder'));
     } else {
       const rel = usbListing.path ? `${usbListing.path}/${e.name}` : e.name;
       const src = `/api/usb/${encodeURIComponent(drive.id)}/thumb?path=${encodeURIComponent(rel)}${apiKey ? '&apikey=' + encodeURIComponent(apiKey) : ''}`;
-      list.appendChild(el(`<div class="file" data-usb="${i}"><img loading="lazy" src="${src}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph'}))">
-        <div style="min-width:0"><div class="name">${esc(e.name)}</div><div class="meta">${fmtSize(e.size)} · ${fmtDate(e.date)}</div></div><span class="muted">›</span></div>`));
+      const card = fileCard(`data-usb="${i}"`, `<img loading="lazy" src="${src}" alt="">`, e.name, `<span>${fmtSize(e.size)}</span><span>${esc(fmtDate(e.date))}</span>`);
+      $('img', card).onerror = function () { this.outerHTML = CUBE; };
+      list.appendChild(card);
     }
   });
 }
@@ -1132,13 +1133,19 @@ function renderTop() {
   const pill = $('#status-pill');
   pill.textContent = text;
   pill.className = `pill ${cls}`;
+  // thin progress line under the top bar, visible on every page while a job runs
+  const line = $('#topline');
+  const j = S && !S._stale ? S.job : null;
+  const running = j && !['idle', 'finished', 'cancelled', 'error'].includes(j.state);
+  line.firstElementChild.style.width = running ? `${j.progress || 0}%` : '0';
+  line.classList.toggle('paused', !!running && j.state === 'paused');
   if (!S || S._stale) { $('#top-temps').innerHTML = ''; return; }
   const t = S.temps;
-  const part = (label, k) => {
+  const part = (label, k, color) => {
     const x = t[k];
-    return `<span>${label} <b>${fmtT(x.actual)}°</b>${x.target ? `/${fmtT(x.target)}` : ''}</span>`;
+    return `<span><i style="background:var(--${color})"></i>${label} <b>${fmtT(x.actual)}°</b>${x.target ? `/${fmtT(x.target)}` : ''}</span>`;
   };
-  $('#top-temps').innerHTML = part('L', 't0') + part('R', 't1') + part('Bed', 'bed');
+  $('#top-temps').innerHTML = part('L', 't0', 'left') + part('R', 't1', 'right') + part('Bed', 'bed', 'bed');
 }
 
 function bindTemps() {
@@ -1147,15 +1154,19 @@ function bindTemps() {
     const t = S.temps[k];
     if (!t) continue;
     if (field === 'actual') node.textContent = fmtT(t.actual);
-    else node.textContent = t.target ? `→ ${fmtT(t.target)}°C` : 'off';
+    else node.textContent = t.target ? `Target ${fmtT(t.target)}°C` : 'Off';
   }
+  // Gauge rings: towards the target while heating, otherwise against the heater's usable range.
+  const CIRC = 138.2;   // 2πr for r = 22
   for (const k of ['t0', 't1', 'bed']) {
     const tile = $(`#tile-${k}`);
     const t = S.temps[k];
-    const bar = $('.heatbar', tile);
-    const pct = t.target ? Math.min(100, Math.max(0, (t.actual || 0) / t.target * 100)) : 0;
-    bar.style.width = `${pct}%`;
-    bar.style.background = pct >= 97 ? 'var(--ok)' : 'var(--warn)';
+    const actual = t.actual || 0;
+    const frac = t.target ? actual / t.target : actual / (k === 'bed' ? 110 : 280);
+    $('.g-fill', tile).style.strokeDashoffset = CIRC * (1 - Math.min(1, Math.max(0, frac)));
+    const hot = t.target > 0 && Math.abs(actual - t.target) <= Math.max(3, t.target * 0.02);
+    tile.classList.toggle('hot', hot);
+    tile.classList.toggle('heating', t.target > 0 && !hot);
     tile.classList.toggle('active-tool', k === `t${S.tool}`);
   }
 }
@@ -1240,44 +1251,84 @@ function renderPowerPrompt() {
   ui.powerModal = m;
 }
 
+// "1h 23m" with the unit letters set smaller, for the big remaining-time readout
+function fmtBig(s) {
+  if (s === null || s === undefined) return '–';
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h) return `${h}<small>h</small> ${String(m).padStart(2, '0')}<small>m</small>`;
+  return m ? `${m}<small>min</small>` : `${s}<small>s</small>`;
+}
+
 function renderHome() {
   const j = S.job;
   const active = ['starting', 'printing', 'pausing', 'paused', 'resuming', 'cancelling'].includes(j.state);
   const ended = ['finished', 'cancelled', 'error'].includes(j.state);
+  // A finished job stays on screen until "Done" is pressed (or another print starts).
+  const endKey = ended ? `${j.file}:${j.state}:${j.elapsed}` : '';
+  const showJob = active || (ended && !!j.file && ui.doneJob !== endKey);
+  $('#hero-idle').classList.toggle('hidden', showJob);
+  $('#hero-job').classList.toggle('hidden', !showJob);
+
+  const ready = S.connection.ready && !S.connection.halted;
+  $('#btn-choose').disabled = !ready;
+  $('#btn-preheat').disabled = !ready;
+  const stateHint = !S.connection.ready ? 'Waiting for the printer to connect.'
+    : 'Pick a model stored on the printer or a USB drive, or send one from your slicer.';
+  $('#idle-title').textContent = S.connection.ready ? 'Ready to print' : 'Printer offline';
+  $('#idle-sub').textContent = stateHint;
+
   const thumb = $('#job-thumb');
   const thumbKey = j.file && j.has_thumbnail ? j.file : '';
   if (thumb.dataset.file !== thumbKey) {
-    thumb.dataset.file = thumbKey;
-    if (thumbKey) {
-      const img = el('<img class="thumb" alt="">');
-      img.src = `/api/thumb/${encodeURIComponent(thumbKey)}${keyQuery()}`;
-      img.id = 'job-thumb';
-      img.dataset.file = thumbKey;
-      thumb.replaceWith(img);
-    } else {
-      const ph = el(`<div id="job-thumb" class="thumb empty" data-file="">${j.file ? 'No preview' : 'No file'}</div>`);
-      thumb.replaceWith(ph);
-    }
+    const next = thumbKey
+      ? el(`<img class="ring-thumb" alt="" src="/api/thumb/${encodeURIComponent(thumbKey)}${keyQuery()}">`)
+      : el('<div class="ring-thumb empty"><svg><use href="#i-cube"/></svg></div>');
+    next.id = 'job-thumb';
+    next.dataset.file = thumbKey;
+    thumb.replaceWith(next);
   }
+  if (!showJob) { renderSpools(); return; }
+
   const labels = {
-    printing: 'Printing', paused: 'Paused', pausing: 'Pausing…', resuming: 'Resuming…', cancelling: 'Cancelling…',
-    finished: 'Finished', cancelled: 'Cancelled', error: 'Stopped', starting: 'Starting…',
+    printing: 'Printing', paused: 'Paused', pausing: 'Pausing', resuming: 'Resuming', cancelling: 'Cancelling',
+    finished: 'Finished', cancelled: 'Cancelled', error: 'Stopped', starting: 'Starting',
   };
-  $('#job-name').textContent = j.file || 'Ready to print';
-  $('#job-state').textContent = labels[j.state] || '';
-  const showNums = active || ended;
-  $('#job-pct').textContent = showNums && j.progress !== null ? `${Math.floor(j.progress)}%` : '';
-  const bar = $('#job-bar');
-  bar.firstElementChild.style.width = `${showNums ? (j.progress || 0) : 0}%`;
-  bar.classList.toggle('paused', j.state === 'paused');
-  $('#job-layer').textContent = showNums && j.layer ? `${j.layer}${j.layers ? ' / ' + j.layers : ''}` : '–';
-  $('#job-z').textContent = showNums ? fmtZ(j.z) : '–';
-  $('#job-elapsed').textContent = showNums ? fmtDur(j.elapsed) : '–';
-  $('#job-remaining').textContent = active ? fmtDur(j.remaining) : (j.state === 'finished' ? 'Done' : '–');
+  const chip = $('#job-state');
+  chip.textContent = labels[j.state] || j.state;
+  const tone = ['paused', 'pausing'].includes(j.state) ? 'paused' : (ended ? j.state : 'printing');
+  chip.className = `chip ${tone}`;
+  $('#job-name').textContent = j.file || '';
+
+  const pct = j.state === 'finished' ? 100 : (j.progress || 0);
+  const ring = $('#job-ring');
+  ring.className = `ring-wrap ${tone}`;
+  $('.ring-fill', ring).style.strokeDashoffset = 339.3 * (1 - Math.min(100, Math.max(0, pct)) / 100);
+  $('#job-pct').innerHTML = j.state === 'finished' ? '<svg style="width:16px;height:16px;vertical-align:-3px"><use href="#i-check"/></svg>'
+    : `${Math.floor(pct)}%`;
+
+  if (active) {
+    $('#job-time-label').textContent = j.state === 'paused' ? 'Remaining · paused' : 'Remaining';
+    $('#job-remaining').innerHTML = j.remaining ? fmtBig(j.remaining) : (j.state === 'starting' ? 'Heating' : '–');
+  } else {
+    $('#job-time-label').textContent = j.state === 'finished' ? 'Printed in' : 'Ran for';
+    $('#job-remaining').innerHTML = fmtBig(j.elapsed);
+  }
   if (active && j.remaining && j.state !== 'paused') {
     const t = new Date(Date.now() + j.remaining * 1000);
-    $('#job-eta').textContent = `Done about ${t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
-  } else $('#job-eta').textContent = '';
+    $('#job-eta').textContent = `Done at about ${t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+  } else if (j.state === 'finished') $('#job-eta').textContent = 'Let the bed cool before taking the part off.';
+  else $('#job-eta').textContent = '';
+
+  $('#job-layer').textContent = j.layer ? `${j.layer}${j.layers ? ' / ' + j.layers : ''}` : '–';
+  $('#job-z').textContent = fmtZ(j.z);
+  $('#job-elapsed').textContent = fmtDur(j.elapsed);
+  $('#job-speed').textContent = S.flow === 100 ? `${S.speed}%` : `${S.speed} / ${S.flow}%`;
+  $('#job-tune .k').textContent = S.flow === 100 ? 'Speed' : 'Speed / flow';
+  $('#job-tune').disabled = !active;
+  const ts = $('#tune-speed'), tf = $('#tune-flow');   // open tune dialog
+  if (ts) ts.textContent = `${S.speed}%`;
+  if (tf) tf.textContent = `${S.flow}%`;
 
   const reason = $('#job-reason');
   let rtext = '';
@@ -1288,24 +1339,52 @@ function renderHome() {
   } else if (j.state === 'error' && j.error) rtext = j.error;
   reason.textContent = rtext;
   reason.className = `banner ${j.state === 'error' ? 'error' : 'warning'}${rtext ? '' : ' hidden'}`;
-  reason.style.margin = '12px 0 0';
 
-  const ready = S.connection.ready && !S.connection.halted;
-  $('#btn-choose').classList.toggle('hidden', active);
-  $('#btn-choose').disabled = !ready;
   $('#btn-pause').classList.toggle('hidden', !['printing', 'resuming'].includes(j.state));
   $('#btn-resume').classList.toggle('hidden', j.state !== 'paused');
-  $('#btn-cancel').classList.toggle('hidden', !active || j.state === 'cancelling');
   $('#btn-filament').classList.toggle('hidden', j.state !== 'paused');
-  $('#job-tune').classList.toggle('hidden', !active);
-  $('#tune-speed').textContent = `${S.speed}%`;
-  $('#tune-flow').textContent = `${S.flow}%`;
+  $('#btn-cancel').classList.toggle('hidden', !active || j.state === 'cancelling');
+  $('#btn-done').classList.toggle('hidden', !ended);
+  $('#btn-again').classList.toggle('hidden', !ended);
+  $('#btn-again').disabled = !ready;
+  $('#btn-done').dataset.key = endKey;
+  renderSpools();
+}
 
+function renderSpools() {
+  $('#home-fan').textContent = `${Math.round(S.fan / 2.55)}%`;
   for (const side of ['left', 'right']) {
     const s = S.scales[side];
     $(`#spool-${side}`).textContent = s && s.grams !== null && s.grams !== undefined ? `${Math.max(0, s.grams)} g` : (s && s.raw !== null && s.raw !== undefined ? 'not calibrated' : '–');
   }
   $('#spools').classList.toggle('hidden', !S.hardware.i2c);
+}
+
+function tuneDialog() {
+  const body = el(`<div>
+    <div class="field"><div class="lab">Print speed<small>Scales every move of the running print.</small></div>
+      <div class="stepper"><button data-tune="speed" data-d="-10">−</button><span class="v num" id="tune-speed">${S.speed}%</span><button data-tune="speed" data-d="10">+</button></div></div>
+    <div class="field"><div class="lab">Flow<small>More or less plastic for the same moves.</small></div>
+      <div class="stepper"><button data-tune="flow" data-d="-5">−</button><span class="v num" id="tune-flow">${S.flow}%</span><button data-tune="flow" data-d="5">+</button></div></div>
+  </div>`);
+  modal({ title: 'Speed and flow', body, actions: [{ label: 'Close' }] });
+}
+
+function preheatDialog() {
+  const presets = S.config.presets || [];
+  const body = `<p class="muted">Heats the ${toolName(S.tool).toLowerCase()} nozzle and the bed. Change the active nozzle on the Control page.</p>`;
+  modal({
+    title: 'Preheat',
+    body,
+    actions: [{ label: 'Cancel' }, ...presets.map(p => ({
+      label: `${p.name}  ${p.hotend}° / ${p.bed}°`,
+      onClick: async () => {
+        await post('/api/temp', { heater: `t${S.tool}`, target: p.hotend });
+        await post('/api/temp', { heater: 'bed', target: p.bed });
+        toast(`Heating for ${p.name}`);
+      },
+    }))],
+  });
 }
 
 function renderControl() {
@@ -1413,17 +1492,23 @@ async function loadFiles() {
 function renderFiles() {
   const list = $('#file-list');
   if (!files.length) {
-    list.innerHTML = '<div class="card muted">No files yet. Upload from a phone or computer, or send from your slicer (OctoPrint upload).</div>';
+    list.innerHTML = '<div class="card muted files-empty">No files yet. Upload from a phone or computer, or send from your slicer (OctoPrint upload).</div>';
     return;
   }
   list.innerHTML = '';
   for (const f of files) {
-    const img = f.has_thumbnail ? `<img loading="lazy" src="/api/thumb/${encodeURIComponent(f.name)}${keyQuery()}" alt="">` : '<div class="ph"></div>';
-    const meta = [f.scanning ? 'reading…' : null, f.est_time_s ? fmtDur(f.est_time_s) : null,
-      f.filament_g ? `${Math.round(f.filament_g)} g` : null, fmtDate(f.date)].filter(Boolean).join(' · ');
-    const row = el(`<div class="file" data-file="${esc(f.name)}">${img}<div style="min-width:0"><div class="name">${esc(f.name)}</div><div class="meta">${esc(meta)}</div></div><span class="muted">›</span></div>`);
-    list.appendChild(row);
+    const img = f.has_thumbnail ? `<img loading="lazy" src="/api/thumb/${encodeURIComponent(f.name)}${keyQuery()}" alt="">` : CUBE;
+    const meta = f.scanning ? '<span>reading…</span>'
+      : [f.est_time_s ? `<span><svg><use href="#i-clock"/></svg>${fmtDur(f.est_time_s)}</span>` : '',
+        f.filament_g ? `<span><svg><use href="#i-spool"/></svg>${Math.round(f.filament_g)} g</span>` : ''].join('') || `<span>${esc(fmtDate(f.date))}</span>`;
+    list.appendChild(fileCard(`data-file="${esc(f.name)}"`, img, f.name, meta));
   }
+}
+
+const CUBE = '<svg><use href="#i-cube"/></svg>';
+function fileCard(attrs, thumb, name, metaHtml, cls = '') {
+  return el(`<div class="file ${cls}" ${attrs}><div class="fthumb">${thumb}</div>
+    <div class="name">${esc(name.replace(/\.(gcode|gco|g)$/i, ''))}</div><div class="meta num">${metaHtml}</div></div>`);
 }
 
 function fileDialog(name) {
@@ -1746,6 +1831,14 @@ const ACTIONS = {
       act(b, () => post('/api/job/cancel'));
     }
   },
+  tune: () => tuneDialog(),
+  preheat: () => preheatDialog(),
+  'job-done': b => {
+    ui.doneJob = b.dataset.key;
+    try { localStorage.setItem('northbolt-done', ui.doneJob); } catch (e) { /* ignore */ }
+    renderHome();
+  },
+  'print-again': b => act(b, async () => { await post('/api/print', { file: S.job.file }); ui.doneJob = ''; }),
   'recovery-resume': () => recoveryDialog(),
   'recovery-discard': async b => {
     if (await confirmBox('Discard the interrupted print?', 'You won\'t be able to resume it.', 'Discard', 'danger')) act(b, () => post('/api/recovery/discard'));
