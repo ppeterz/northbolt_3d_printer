@@ -313,6 +313,15 @@ class ApiTests(E2EBase):
         self.rig.post("/api/settings", {"touch_dead_zone": None})
         self.assertIsNone(self.rig.get("/api/settings")["touch_dead_zone"])
 
+    def test_text_size_setting(self):
+        self.assertEqual(self.rig.state()["config"]["text_size"], 75)
+        self.rig.post("/api/settings", {"text_size": 90})
+        self.rig.wait(lambda s: s["config"]["text_size"] == 90, 5, "pushed to the screen")
+        for bad in (10, 300, "big", True):
+            r = self.rig.post("/api/settings", {"text_size": bad}, expect_ok=False)
+            self.assertEqual(r["status"], 400, bad)
+        self.assertEqual(self.rig.get("/api/settings")["text_size"], 90)
+
     def test_boot_intro_setting(self):
         self.assertTrue(self.rig.state()["config"]["boot_intro"])
         self.rig.post("/api/settings", {"boot_intro": False})

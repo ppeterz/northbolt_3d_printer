@@ -192,7 +192,7 @@
           <div class="row" style="min-width:0">
             <h2 style="margin:0">Files</h2>
             <div class="seg hidden" id="file-source"></div>
-            <span class="muted num" id="files-free" style="font-size:13px"></span>
+            <span class="muted num" id="files-free" style="font-size:calc(13px * var(--ts))"></span>
           </div>
           <label class="btn small" id="upload-btn">
             <svg><use href="#i-upload"/></svg>Upload
@@ -285,7 +285,7 @@
         </div>
         <div class="row wrap" style="margin-top:10px">
           <button class="btn small" data-act="check-sensors">Check sensors</button>
-          <span class="muted" style="font-size:13px">Loading heats the nozzle, pushes filament in and purges a little. Unloading pushes a bit first so the tip pulls out cleanly.</span>
+          <span class="muted" style="font-size:calc(13px * var(--ts))">Loading heats the nozzle, pushes filament in and purges a little. Unloading pushes a bit first so the tip pulls out cleanly.</span>
         </div>
       </section>
 
@@ -299,7 +299,7 @@
         <div id="cal-level">
           <div id="lv-idle" class="card stack">
             <h2>Level the bed with its three screws</h2>
-            <div class="muted" style="font-size:14px">The printer probes the bed (auto bed leveling), then shows which screw to turn,
+            <div class="muted" style="font-size:calc(14px * var(--ts))">The printer probes the bed (auto bed leveling), then shows which screw to turn,
               which way and how far. Turn them, probe again, and repeat until every screw shows a tick.</div>
             <div class="field"><div class="lab">Heat the bed first<small>The bed shape changes when it is hot.</small></div>
               <label class="switch"><input type="checkbox" id="lv-heat" checked><span></span></label></div>
@@ -355,7 +355,7 @@
               </div>
               <div class="stack" style="flex:1;min-width:0">
                 <div class="muted" id="lv-teach-msg"></div>
-                <div class="zread num" style="font-size:30px" id="lv-teach-pos">–</div>
+                <div class="zread num" style="font-size:calc(30px * var(--ts))" id="lv-teach-pos">–</div>
                 <div class="row"><span class="muted">Step</span><div class="seg" id="lv-steps"><button data-lvstep="1">1</button><button data-lvstep="5" class="on">5</button><button data-lvstep="10">10 mm</button></div></div>
               </div>
             </div>
@@ -406,7 +406,7 @@
               <div class="zread num" id="z-read">–</div>
               <div class="muted num" id="z-delta"></div>
             </div>
-            <div class="muted" style="max-width:52%;font-size:14px" id="z-instr"></div>
+            <div class="muted" style="max-width:52%;font-size:calc(14px * var(--ts))" id="z-instr"></div>
           </div>
           <div class="zgrid" style="margin-top:12px">
             <button class="btn" data-zstep="1"><svg><use href="#i-up"/></svg>1</button>

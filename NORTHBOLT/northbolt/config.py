@@ -113,6 +113,7 @@ DEFAULTS = {
     # {"top": 200, "bottom": 355}. The printer's own screen then keeps every button out of it.
     # Measured and saved by Settings -> System -> Touch test. None: the whole panel works.
     "touch_dead_zone": None,
+    "text_size": 75,             # % of normal text size on the printer's own screen (phones keep 100)
     "boot_intro": True,          # play the NORTHBOLT intro on the printer's screen when it starts
 
     "scales": {

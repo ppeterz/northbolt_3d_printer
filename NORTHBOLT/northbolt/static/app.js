@@ -30,6 +30,24 @@ function applyDeadZone() {
   else { st.removeProperty('--dz-top'); st.removeProperty('--dz-bottom'); }
 }
 
+// Text size (settings.text_size, % of normal) for the printer's own 800x480 screen; phones and
+// computers keep normal text. Remembered locally so the first paint already has the right size.
+// ?ts=75 tries a size on any device.
+const TS_FORCE = Number((/[?&]ts=(\d+)/.exec(location.search) || [])[1]) || 0;
+function applyTextSize() {
+  let pct = TS_FORCE || 100;
+  if (!TS_FORCE && KIOSK) {
+    if (S && S.config && S.config.text_size) {
+      pct = S.config.text_size;
+      try { localStorage.setItem('northbolt-text-size', String(pct)); } catch (e) { /* storage blocked */ }
+    } else {
+      try { pct = Number(localStorage.getItem('northbolt-text-size')) || 75; } catch (e) { pct = 75; }
+    }
+  }
+  const ts = String(pct / 100);
+  if (document.documentElement.style.getPropertyValue('--ts') !== ts) document.documentElement.style.setProperty('--ts', ts);
+}
+
 // Start-up splash. On the printer's own screen, once per browser start (so once per power-on), it
 // plays the intro from the frame the boot splash left on screen; elsewhere it shows the logo while
 // the first state loads. It fades into the UI when both the intro and the first state are done.
@@ -93,6 +111,7 @@ const splash = (() => {
 })();
 
 let S = null;            // latest state from the server
+applyTextSize();         // before the first paint, from the remembered size
 let files = [];
 let settings = null;     // full settings (Settings page)
 let system = null;
@@ -725,7 +744,7 @@ async function usbFileDialog(drive, rel, entry) {
   const busy = S && S.job && !['idle', 'finished', 'cancelled', 'error'].includes(S.job.state);
   const body = `<div class="row" style="align-items:flex-start;gap:14px">${img}<div style="flex:1">${rows.map(r =>
     `<div class="row between" style="padding:3px 0"><span class="muted">${r[0]}</span><span class="num">${esc(r[1])}</span></div>`).join('')}
-    <p class="muted" style="font-size:13px;margin:8px 0 0">The file is copied to the printer first, so you can take the drive out once printing starts.</p></div></div>`;
+    <p class="muted" style="font-size:calc(13px * var(--ts));margin:8px 0 0">The file is copied to the printer first, so you can take the drive out once printing starts.</p></div></div>`;
   modal({
     title: entry.name, body,
     actions: [
@@ -886,13 +905,13 @@ function renderLevel() {
           sub = `${turnsText(s.turns)} (${s.degrees}°). This corner is ${Math.abs(s.delta).toFixed(2)} mm too ${s.action === 'lower' ? 'high' : 'low'}.`;
         }
         list.appendChild(el(`<div class="card lv-screw ${s.action}">${dialSvg(s)}
-          <div style="min-width:0"><div class="muted" style="font-size:13px">${esc(s.name)}</div>
-          <div class="lv-title">${esc(title)}</div><div class="muted" style="font-size:13px">${esc(sub)}</div></div></div>`));
+          <div style="min-width:0"><div class="muted" style="font-size:calc(13px * var(--ts))">${esc(s.name)}</div>
+          <div class="lv-title">${esc(title)}</div><div class="muted" style="font-size:calc(13px * var(--ts))">${esc(sub)}</div></div></div>`));
       }
       const warpNote = res.warp > 0.1
         ? `The bed itself is bent by ${res.warp.toFixed(2)} mm. Screws can't fix that; the mesh makes up for it while printing.`
         : `Bed shape: within ${Math.max(res.warp, 0.01).toFixed(2)} mm once tilt is removed.`;
-      list.appendChild(el(`<div class="muted" style="font-size:13px;padding:0 4px">${res.level ? '<b style="color:var(--ok)">The bed is level.</b> Save the mesh so prints use it. ' : 'Seen from above. '}${esc(warpNote)}</div>`));
+      list.appendChild(el(`<div class="muted" style="font-size:calc(13px * var(--ts));padding:0 4px">${res.level ? '<b style="color:var(--ok)">The bed is level.</b> Save the mesh so prints use it. ' : 'Seen from above. '}${esc(warpNote)}</div>`));
     }
     $('#lv-again').classList.toggle('hidden', res.level);
     $('#lv-save').classList.toggle('hidden', !res.level);
@@ -981,7 +1000,7 @@ function firmwareCard() {
     <div id="fw-status"></div>
   </div>`);
   const auto = $('#fw-auto', card);
-  auto.appendChild(el('<div class="muted num" id="fw-avail" style="font-size:14px;padding-bottom:4px"></div>'));
+  auto.appendChild(el('<div class="muted num" id="fw-avail" style="font-size:calc(14px * var(--ts));padding-bottom:4px"></div>'));
   auto.appendChild(fieldNode(tog('firmware.auto_check', 'Check for updates by itself',
     'Looks at your repository every few hours and asks before installing anything')));
   $('#fw-save', card).onclick = e => act(e.currentTarget, async () => {
@@ -1015,7 +1034,7 @@ function renderFirmware() {
   if (fu.state === 'working') {
     if (!fwModal) {
       fwModal = modal({ title: 'Updating the printer firmware', sticky: true,
-        body: '<div class="row" style="gap:12px"><div class="spinner"></div><div class="fw-text" style="flex:1"></div></div><div class="bar"><div></div></div><p class="muted" style="font-size:13px">Don\'t turn the printer off. This takes about 2 minutes.</p>' });
+        body: '<div class="row" style="gap:12px"><div class="spinner"></div><div class="fw-text" style="flex:1"></div></div><div class="bar"><div></div></div><p class="muted" style="font-size:calc(13px * var(--ts))">Don\'t turn the printer off. This takes about 2 minutes.</p>' });
     }
     $('.fw-text', fwModal.box).textContent = `${FW_PHASES[fu.phase] || fu.message}${fu.progress !== null && fu.progress !== undefined ? ` ${fu.progress}%` : ''}`;
     $('.bar > div', fwModal.box).style.width = `${fu.progress || 0}%`;
@@ -1047,9 +1066,9 @@ function renderFirmware() {
       relBox.innerHTML = `<div class="card stack">
         <div class="row between"><h3 style="margin:0">Latest release</h3><span class="muted">${esc(rel.repo)}</span></div>
         <div class="row between"><b>${esc(rel.name)}</b><span class="muted num">${esc(when)}</span></div>
-        <div class="muted num" style="font-size:13px">${esc(rel.asset)}${rel.size ? ` · ${fmtSize(rel.size)}` : ''}${rel.digest ? ' · checksum from GitHub' : ''}</div>
-        ${rel.notes ? `<div class="muted" style="font-size:13px;white-space:pre-wrap;max-height:110px;overflow:auto">${esc(rel.notes)}</div>` : ''}
-        <div class="split-edges"><span class="muted" style="font-size:13px">A backup of the current firmware is saved first.</span>
+        <div class="muted num" style="font-size:calc(13px * var(--ts))">${esc(rel.asset)}${rel.size ? ` · ${fmtSize(rel.size)}` : ''}${rel.digest ? ' · checksum from GitHub' : ''}</div>
+        ${rel.notes ? `<div class="muted" style="font-size:calc(13px * var(--ts));white-space:pre-wrap;max-height:110px;overflow:auto">${esc(rel.notes)}</div>` : ''}
+        <div class="split-edges"><span class="muted" style="font-size:calc(13px * var(--ts))">A backup of the current firmware is saved first.</span>
           <div class="row"><button class="btn warn" id="fw-install">Install on the printer</button></div></div>
       </div>`;
       $('#fw-install', relBox).onclick = async e => {
@@ -1088,7 +1107,7 @@ function renderFirmwarePrompt() {
     body: `<p><b>${esc(a.name)}</b> is ready in your GitHub repository.</p>
       <div class="row between"><span class="muted">The printer runs</span><span class="num" style="text-align:right">${esc(a.current)}</span></div>
       <div class="row between"><span class="muted">New version</span><span class="num" style="text-align:right">${esc(a.firmware)}</span></div>
-      <p class="muted" style="font-size:13px">Installing takes about 2 minutes. The heaters turn off and the current firmware is saved first, so you can go back. Don't turn the printer off while it runs.</p>`,
+      <p class="muted" style="font-size:calc(13px * var(--ts))">Installing takes about 2 minutes. The heaters turn off and the current firmware is saved first, so you can go back. Don't turn the printer off while it runs.</p>`,
     actions: [
       { label: 'Later', onClick: async () => { quiet(); await post('/api/firmware/snooze', { hours: 24 }); toast('Reminding you tomorrow'); } },
       { label: 'Skip this version', onClick: async () => { quiet(); await post('/api/firmware/skip'); } },
@@ -1166,7 +1185,7 @@ function heating() {
 }
 
 function render() {
-  if (S) applyDeadZone();
+  if (S) { applyDeadZone(); applyTextSize(); }
   renderTop();
   if (!S) return;
   if (!S._stale) { splash.setIntro(S.config.boot_intro !== false); splash.ready(); }
@@ -1730,6 +1749,7 @@ const FORMS = {
       num('zoffset.bed_temp', 'Bed temperature', '°C', 0, 110, 5), num('zoffset.nozzle_temp', 'Nozzle temperature', '°C', 0, 250, 5, 'Warm, but cool enough not to ooze'),
       tog('zoffset.use_mesh', 'Use the bed mesh while measuring')] },
     { title: 'Machine', fields: [tog('lift_mechanism', 'Right nozzle has a lift mechanism', 'Gives the right nozzle its own Z offset (M206 E)')] },
+    { title: 'Screen', fields: [num('text_size', 'Text size on the printer\'s screen', '%', 50, 120, 5, 'Phones and computers keep normal text')] },
   ],
   recovery: [
     { title: 'Power-loss recovery', fields: [tog('recovery.enabled', 'Save progress for power-loss recovery'),
@@ -1814,7 +1834,7 @@ function buildTab(tab) {
   if (FORMS[tab]) buildForm(box, FORMS[tab]);
   if (tab === 'general') box.appendChild(presetsCard());
   if (tab === 'recovery') {
-    box.appendChild(el(`<div class="card muted" style="font-size:14px">After a power cut the printer is reheated, Z is set to where the nozzle stopped (it is never homed into the part), X and Y are homed, and printing continues from just before the last confirmed move. The lead screws hold Z while the power is off.</div>`));
+    box.appendChild(el(`<div class="card muted" style="font-size:calc(14px * var(--ts))">After a power cut the printer is reheated, Z is set to where the nozzle stopped (it is never homed into the part), X and Y are homed, and printing continues from just before the last confirmed move. The lead screws hold Z while the power is off.</div>`));
   }
   if (tab === 'scales') box.appendChild(scalesCard());
   if (tab === 'connection') box.appendChild(connectionCard());
@@ -1869,7 +1889,7 @@ function connectionCard() {
       <div class="row wrap"><input type="text" id="conn-port" value="${esc(settings.serial_port)}" style="flex:1">
       <select id="conn-baud">${[115200, 250000, 57600].map(b => `<option${b === settings.baudrate ? ' selected' : ''}>${b}</option>`).join('')}</select>
       <button class="btn small" id="conn-save">Save</button></div>
-      <div class="muted" style="font-size:13px">"auto" picks the first USB serial port. The Skriware firmware runs at 115200.</div>
+      <div class="muted" style="font-size:calc(13px * var(--ts))">"auto" picks the first USB serial port. The Skriware firmware runs at 115200.</div>
     </div>
     <div class="row wrap"><button class="btn" data-act="connect">Connect</button><button class="btn" data-act="disconnect">Disconnect</button>
       <button class="btn" data-act="reconnect">Reset board</button><button class="btn" data-act="m999">Restart after error (M999)</button></div></div>`);
@@ -1884,16 +1904,16 @@ function systemCard() {
   const urls = (system.ips || []).map(ip => `http://${ip}:${system.port}`);
   const card = el(`<div class="stack">
     <div class="card row between" style="gap:12px">
-      <div style="min-width:0"><h3 style="margin:0 0 4px">Touch screen</h3><div class="muted" style="font-size:13.5px" id="sys-touch-state"></div></div>
+      <div style="min-width:0"><h3 style="margin:0 0 4px">Touch screen</h3><div class="muted" style="font-size:calc(13.5px * var(--ts))" id="sys-touch-state"></div></div>
       <div class="row">${KIOSK ? `<button class="btn" id="sys-touch-clear">Clear</button>
         <button class="btn primary" id="sys-touch-test">Touch test</button>` : ''}</div>
     </div>
     <div class="card stack"><h3>Use from a phone or computer</h3>
-      ${urls.length ? urls.map(u => `<div class="num" style="font-size:18px">${esc(u)}</div>`).join('') : '<div class="muted">No network address found.</div>'}
+      ${urls.length ? urls.map(u => `<div class="num" style="font-size:calc(18px * var(--ts))">${esc(u)}</div>`).join('') : '<div class="muted">No network address found.</div>'}
       ${system.api_key ? `<div class="row between"><span class="muted">API key (also for slicer upload)</span><b class="num" style="user-select:text">${esc(system.api_key)}</b></div>` : ''}
     </div>
     <div class="card" id="sys-key-field"></div>
-    <div class="card stack"><h3>Slicer upload</h3><div class="muted" style="font-size:14px">In PrusaSlicer or OrcaSlicer, add a physical printer of type OctoPrint, use the address above and the API key. "Upload and print" then sends straight to this printer.</div></div>
+    <div class="card stack"><h3>Slicer upload</h3><div class="muted" style="font-size:calc(14px * var(--ts))">In PrusaSlicer or OrcaSlicer, add a physical printer of type OctoPrint, use the address above and the API key. "Upload and print" then sends straight to this printer.</div></div>
     <div class="row wrap"><button class="btn" id="sys-reload">Reload screen</button><button class="btn danger" id="sys-off">Turn printer off</button>
       <span class="muted">NORTHBOLT ${esc(system.version)}</span></div></div>`);
   $('#sys-key-field', card).appendChild(fieldNode(tog('require_key_remote', 'Require the API key on other devices', 'This screen never needs it')));
@@ -2011,7 +2031,7 @@ function renderSettingsLive() {
       <div class="row between"><span class="muted">Printer</span><b>${c.ready ? 'Connected' : (c.connected ? 'Connecting' : 'Not connected')}</b></div>
       <div class="row between"><span class="muted">Port</span><span class="num">${esc(c.port || '–')}</span></div>
       ${c.error ? `<div class="row between"><span class="muted">Last error</span><span>${esc(c.error)}</span></div>` : ''}
-      <div class="row between"><span class="muted">Firmware</span><span class="num" style="font-size:12px;text-align:right">${esc((c.firmware || '–').replace('FIRMWARE_NAME:', '').split(' SOURCE_CODE_URL')[0])}</span></div>
+      <div class="row between"><span class="muted">Firmware</span><span class="num" style="font-size:max(9.5px, calc(12px * var(--ts)));text-align:right">${esc((c.firmware || '–').replace('FIRMWARE_NAME:', '').split(' SOURCE_CODE_URL')[0])}</span></div>
       <div class="row between"><span class="muted">Line errors fixed by resend</span><span class="num">${c.stats.resends}</span></div>`;
   }
 }

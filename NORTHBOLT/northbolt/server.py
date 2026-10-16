@@ -19,7 +19,7 @@ MAX_UPLOAD = 1024 * 1024 * 1024
 LOCAL = ("127.0.0.1", "::1", "localhost")
 EDITABLE = {"firmware", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
             "lift_mechanism", "serial_port", "baudrate", "auto_connect", "power_button_gpio",
-            "require_key_remote", "touch_dead_zone", "boot_intro"}
+            "require_key_remote", "touch_dead_zone", "boot_intro", "text_size"}
 
 
 def write_boot_js(settings):
@@ -406,6 +406,10 @@ def make_app(svc):
         bad = set(changes) - EDITABLE
         if bad:
             raise ValueError(f"Not editable: {', '.join(sorted(bad))}")
+        if "text_size" in changes:
+            size = changes["text_size"]
+            if isinstance(size, bool) or not isinstance(size, (int, float)) or not 50 <= size <= 150:
+                raise ValueError("text_size must be between 50 and 150 (%)")
         if "touch_dead_zone" in changes:
             changes["touch_dead_zone"] = check_dead_zone(changes["touch_dead_zone"])
         svc.settings.update(changes)
