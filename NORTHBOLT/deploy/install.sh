@@ -1,15 +1,23 @@
 #!/bin/sh
 # Install NORTHBOLT on the printer's Raspberry Pi (current Raspberry Pi OS, Lite or Desktop).
 #
-#   sudo sh deploy/install.sh            # server + full-screen kiosk on the attached screen
-#   sudo sh deploy/install.sh --no-kiosk # server only (use it from a phone or computer)
+#   sudo sh deploy/install.sh             # server + full-screen kiosk + boot splash
+#   sudo sh deploy/install.sh --no-kiosk  # server only (use it from a phone or computer)
+#   sudo sh deploy/install.sh --no-splash # kiosk without the boot splash (start-up text shows)
 #
 # Before running: back up the SD card and stop the original Skriware software so the serial
 # port is free (see README.md).
 set -eu
 
 KIOSK=1
-[ "${1:-}" = "--no-kiosk" ] && KIOSK=0
+SPLASH=1
+for arg in "$@"; do
+  case "$arg" in
+    --no-kiosk) KIOSK=0 ;;
+    --no-splash) SPLASH=0 ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run with sudo." >&2
@@ -107,6 +115,36 @@ EOF
   systemctl enable northbolt-kiosk.service
   systemctl set-default graphical.target
   echo "Kiosk installed. It starts on the next boot (or: sudo systemctl start northbolt-kiosk)."
+
+  if [ "$SPLASH" -eq 1 ]; then
+    # Boot splash: hides the start-up text behind the first frame of the intro video until the UI
+    # takes over (northbolt-kiosk.service ends it). Undo: put back cmdline.txt.before-northbolt.
+    apt-get install -y plymouth
+    mkdir -p /usr/share/plymouth/themes/northbolt
+    cp "$SRC_DIR"/deploy/plymouth/northbolt/* /usr/share/plymouth/themes/northbolt/
+    BOOT=/boot/firmware
+    [ -f "$BOOT/cmdline.txt" ] || BOOT=/boot
+    [ -f "$BOOT/cmdline.txt.before-northbolt" ] || cp "$BOOT/cmdline.txt" "$BOOT/cmdline.txt.before-northbolt"
+    # cmdline.txt must stay one line: add the quiet-boot words that are missing, keep everything else
+    python3 - "$BOOT/cmdline.txt" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path) as fh:
+    words = fh.read().split()
+words = [w for w in words if not w.startswith("loglevel=")]
+for w in ("quiet", "splash", "plymouth.ignore-serial-consoles", "logo.nologo", "loglevel=3",
+          "vt.global_cursor_default=0", "consoleblank=0"):
+    if w not in words:
+        words.append(w)
+with open(path, "w") as fh:
+    fh.write(" ".join(words) + "\n")
+PY
+    grep -q '^disable_splash=1' "$BOOT/config.txt" || \
+      printf '\n# NORTHBOLT: no rainbow square at power-on\ndisable_splash=1\n' >> "$BOOT/config.txt"
+    # set the theme and rebuild the initramfs, so the splash shows early in the boot
+    plymouth-set-default-theme -R northbolt
+    echo "Boot splash installed."
+  fi
 fi
 
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"

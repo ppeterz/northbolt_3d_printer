@@ -1,19 +1,26 @@
 [Unit]
 Description=NORTHBOLT touch screen (Chromium in the cage kiosk compositor on tty1)
-After=systemd-user-sessions.service plymouth-quit-wait.service northbolt.service
+After=systemd-user-sessions.service plymouth-start.service northbolt.service
 Wants=dbus.socket systemd-logind.service northbolt.service
 After=dbus.socket systemd-logind.service
-Conflicts=getty@tty1.service
-After=getty@tty1.service
+# Like a display manager: this unit ends the boot splash itself (below), so the usual
+# plymouth-quit doesn't run first and show the text console in between.
+Conflicts=getty@tty1.service plymouth-quit.service
+After=getty@tty1.service plymouth-quit.service
+OnFailure=plymouth-quit.service
 ConditionPathExists=/dev/tty1
 
 [Service]
 Type=simple
 User=@USER@
-# Wait for the local server, then show the UI full screen with no browser chrome.
+# Wait for the local server (the boot splash keeps breathing meanwhile).
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do curl -fs http://127.0.0.1:@PORT@/api/version >/dev/null && exit 0; sleep 1; done; exit 0'
+# Hand the screen over: the splash's last frame stays up until Chromium draws, and the UI then
+# plays the intro from that same frame.
+ExecStartPre=+/bin/sh -c 'command -v plymouth >/dev/null && plymouth quit --retain-splash; exit 0'
 ExecStart=/usr/bin/cage -s -- @BROWSER@ --kiosk --noerrdialogs --disable-infobars --incognito \
   --no-first-run --disable-pinch --overscroll-history-navigation=0 --disable-features=Translate \
+  --autoplay-policy=no-user-gesture-required \
   --check-for-update-interval=31536000 --password-store=basic http://127.0.0.1:@PORT@/
 Restart=always
 RestartSec=3

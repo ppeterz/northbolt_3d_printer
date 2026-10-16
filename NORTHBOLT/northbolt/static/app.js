@@ -30,6 +30,60 @@ function applyDeadZone() {
   else { st.removeProperty('--dz-top'); st.removeProperty('--dz-bottom'); }
 }
 
+// Start-up splash. On the printer's own screen, once per browser start (so once per power-on), it
+// plays the intro from the frame the boot splash left on screen; elsewhere it shows the logo while
+// the first state loads. It fades into the UI when both the intro and the first state are done.
+// A tap skips the intro. ?intro=1 plays it on any device, ?intro=0 never.
+const splash = (() => {
+  const box = $('#splash');
+  const video = $('#splash-video');
+  const store = (area, key, value) => { try { if (value === undefined) return area.getItem(key); area.setItem(key, value); } catch (e) { /* storage blocked */ } return null; };
+  const wanted = /[?&]intro=1/.test(location.search) || (KIOSK && !/[?&]intro=0/.test(location.search)
+    && store(sessionStorage, 'northbolt-intro') !== '1' && store(localStorage, 'northbolt-intro-off') !== '1');
+  const started = Date.now();
+  let introDone = !wanted;
+  let ready = false;
+  let finished = false;
+  let introPref = null;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    box.classList.add('out');
+    try { video.pause(); } catch (e) { /* ignore */ }
+    setTimeout(() => box.remove(), 800);
+  };
+  const check = () => {
+    if (finished) return;
+    if (introDone && ready) setTimeout(finish, Math.max(0, 700 - (Date.now() - started)));  // the logo shows at least 0.7 s
+    else if (introDone) box.classList.add('waiting');    // the intro is over but the printer server hasn't answered
+  };
+  const endIntro = () => { if (!introDone) { introDone = true; check(); } };
+  const logoOnly = () => { box.classList.add('logo-only'); endIntro(); };
+  if (wanted) {
+    store(sessionStorage, 'northbolt-intro', '1');
+    video.addEventListener('ended', endIntro);
+    video.addEventListener('error', logoOnly);
+    video.src = '/static/intro.mp4';
+    const p = video.play();
+    if (p) p.catch(logoOnly);
+    setTimeout(endIntro, 13000);   // never hold the UI back longer than this
+  } else {
+    box.classList.add('logo-only');
+  }
+  setTimeout(check, 2500);
+  box.addEventListener('pointerdown', () => { introDone = true; if (ready) finish(); else check(); });
+  return {
+    ready() { if (!ready) { ready = true; check(); } },
+    /** settings.boot_intro, remembered so the next start knows before the server answers */
+    setIntro(on) {
+      if (introPref === on) return;
+      introPref = on;
+      store(localStorage, 'northbolt-intro-off', on ? '0' : '1');
+      if (!on && wanted) endIntro();
+    },
+  };
+})();
+
 let S = null;            // latest state from the server
 let files = [];
 let settings = null;     // full settings (Settings page)
@@ -136,6 +190,7 @@ function confirmBox(title, html, okLabel = 'OK', cls = 'primary') {
 
 function askKey() {
   if ($('#key-modal')) return;
+  splash.ready();   // the key prompt must not sit behind the splash
   const body = el(`<div id="key-modal"><p class="muted">Open <b>Settings → System</b> on the printer's own screen to see the key.</p>
     <input type="password" id="key-input" placeholder="API key" style="width:100%"></div>`);
   modal({
@@ -1106,6 +1161,7 @@ function render() {
   if (S) applyDeadZone();
   renderTop();
   if (!S) return;
+  if (!S._stale) { splash.setIntro(S.config.boot_intro !== false); splash.ready(); }
   bindTemps();
   renderAlerts();
   renderRecoveryPrompt();
@@ -1833,6 +1889,7 @@ function systemCard() {
     <div class="row wrap"><button class="btn" id="sys-reload">Reload screen</button><button class="btn danger" id="sys-off">Turn printer off</button>
       <span class="muted">NORTHBOLT ${esc(system.version)}</span></div></div>`);
   $('#sys-key-field', card).appendChild(fieldNode(tog('require_key_remote', 'Require the API key on other devices', 'This screen never needs it')));
+  $('#sys-key-field', card).appendChild(fieldNode(tog('boot_intro', 'Play the intro when the printer starts', 'On the printer\'s own screen, after the boot splash. Tap it to skip.')));
   const tz = settings.touch_dead_zone;
   $('#sys-touch-state', card).textContent = tz
     ? `A strip from ${tz.top} to ${tz.bottom} px down doesn't respond. The printer's screen keeps its buttons out of it.`

@@ -1,0 +1,39 @@
+# NORTHBOLT boot splash.
+# Shows the first frame of the intro video (a point of light on black) and lets the light breathe
+# until the touch screen UI takes over; the UI then plays the intro from that same frame.
+# Images are made for the Skriware 2's 800x480 panel and scaled to fit any other screen.
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+bg_image = Image("background.png");
+scale = Math.Min(screen_w / bg_image.GetWidth(), screen_h / bg_image.GetHeight());
+bg_w = Math.Int(bg_image.GetWidth() * scale);
+bg_h = Math.Int(bg_image.GetHeight() * scale);
+bg_x = Math.Int((screen_w - bg_w) / 2);
+bg_y = Math.Int((screen_h - bg_h) / 2);
+bg = Sprite(bg_image.Scale(bg_w, bg_h));
+bg.SetPosition(bg_x, bg_y, 0);
+
+# glow.png is a horizontal band cut from an 800x480 canvas, starting 189 px down
+glow_image = Image("glow.png");
+glow_w = Math.Int(glow_image.GetWidth() * scale);
+glow_h = Math.Int(glow_image.GetHeight() * scale);
+glow = Sprite(glow_image.Scale(glow_w, glow_h));
+glow.SetPosition(bg_x, bg_y + Math.Int(189 * scale), 1);
+
+tick = 0;
+fun refresh_callback ()
+{
+  tick = tick + 1;
+  # one slow breath about every 3 seconds (the refresh runs about 50 times a second)
+  glow.SetOpacity(0.35 + 0.65 * (0.5 + 0.5 * Math.Sin(tick / 24)));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# nothing to type and nothing to show while booting a printer
+fun message_callback (text) { }
+Plymouth.SetMessageFunction(message_callback);

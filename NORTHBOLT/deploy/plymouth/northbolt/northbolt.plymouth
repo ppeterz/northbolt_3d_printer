@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=NORTHBOLT
+Description=NORTHBOLT boot splash: the first frame of the intro, with its point of light breathing while the Pi starts
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/northbolt
+ScriptFile=/usr/share/plymouth/themes/northbolt/northbolt.script

@@ -5,12 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#090b0f">
 <title>NORTHBOLT</title>
+<link rel="icon" type="image/svg+xml" href="/static/logo-mark.svg">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<!-- Start-up splash: on the printer's own screen it plays the intro from the frame the boot splash
+     left on screen, then fades into the UI. Elsewhere it shows the logo while the first state loads. -->
+<div id="splash" aria-hidden="true">
+  <video id="splash-video" muted playsinline preload="auto"></video>
+  <img class="splash-logo" src="/static/logo-full.png" alt="">
+  <div class="splash-wait">Connecting…</div>
+</div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <symbol id="i-bolt" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2 5 13.5h6L10 22l9-11.5h-6z"/></symbol>
+    <symbol id="i-logo" viewBox="0 0 202 223" fill="currentColor"><path d="M0 42 184 146 147 105V53L202 0V219L52 119V175L0 223Z"/></symbol>
     <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></symbol>
     <symbol id="i-files" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
     <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
@@ -60,7 +69,7 @@
 
   <div id="main">
     <header id="topbar">
-      <span class="brand" aria-label="NORTHBOLT"><span class="brand-mark"><svg><use href="#i-bolt"/></svg></span><span>NORTHBOLT</span></span>
+      <span class="brand" aria-label="NORTHBOLT"><svg class="brand-n"><use href="#i-logo"/></svg><img class="brand-word" src="/static/logo-wordmark.png" alt="NORTHBOLT"></span>
       <button id="status-pill" class="pill" data-act="alerts" title="Status and messages">Connecting</button>
       <span id="top-temps" class="num"></span>
       <span class="spacer"></span>
@@ -86,7 +95,7 @@
           <div class="card hero" id="job-card">
             <!-- nothing printing -->
             <div class="hero-idle" id="hero-idle">
-              <div class="idle-mark"><svg><use href="#i-bolt"/></svg></div>
+              <div class="idle-mark"><svg><use href="#i-logo"/></svg></div>
               <div class="idle-title" id="idle-title">Ready to print</div>
               <div class="muted" id="idle-sub">Pick a model stored on the printer or a USB drive, or send one from your slicer.</div>
               <div class="quick">

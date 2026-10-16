@@ -152,6 +152,21 @@ On older images that use `dhcpcd`, the Wi-Fi tab says it isn't available.
 
 Settings live in `~/northbolt-data/settings.json`. Uploaded files are in `~/northbolt-data/gcodes/`.
 
+### Start-up splash
+
+From power-on to the UI, the printer's screen shows no start-up text:
+
+1. **Boot splash** (Plymouth, theme in `deploy/plymouth/northbolt`): the first frame of the intro, a point of light on
+   black, breathing while the Pi starts. The installer also adds `quiet splash …` to `cmdline.txt` (keeping a copy as
+   `cmdline.txt.before-northbolt`) and `disable_splash=1` to `config.txt`, which removes the rainbow square.
+2. **Intro**: once the UI loads, it plays `static/intro.mp4` from that same frame, the NORTHBOLT logo forms, and the
+   screen fades into Home. Tap to skip it. Turn it off in **Settings → System**.
+
+Phones and computers only see the logo for a moment while the page loads.
+
+Install without the boot splash with `sudo sh deploy/install.sh --no-splash`. To remove it later, copy
+`cmdline.txt.before-northbolt` back over `cmdline.txt` on the `bootfs` drive. That brings the start-up text back.
+
 ### If part of the touch panel doesn't respond
 
 Open **Settings → System → Touch test** on the printer's screen and slide a finger slowly from the top edge to the
@@ -294,5 +309,7 @@ Everything above was tested against the simulator, not the Skriware 2 itself. Ch
    Check the screw positions, thread and turning direction once.
 8. Firmware updates with real avrdude and the real board. They were tested with a fake avrdude and a fake GitHub server.
    Do the first one with the printer idle and stand by it.
+9. The boot splash and its hand-over to the kiosk on the Pi. The intro and its fade into the UI were tested in a
+   desktop browser, not in Chromium on the Pi 3.
 
 Do the first resume test with a small, sacrificial print, standing at the printer with a hand near the power switch.

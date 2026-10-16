@@ -19,7 +19,7 @@ MAX_UPLOAD = 1024 * 1024 * 1024
 LOCAL = ("127.0.0.1", "::1", "localhost")
 EDITABLE = {"firmware", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
             "lift_mechanism", "serial_port", "baudrate", "auto_connect", "power_button_gpio",
-            "require_key_remote", "touch_dead_zone"}
+            "require_key_remote", "touch_dead_zone", "boot_intro"}
 
 
 def check_dead_zone(value):

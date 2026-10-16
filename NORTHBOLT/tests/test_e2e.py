@@ -313,6 +313,14 @@ class ApiTests(E2EBase):
         self.rig.post("/api/settings", {"touch_dead_zone": None})
         self.assertIsNone(self.rig.get("/api/settings")["touch_dead_zone"])
 
+    def test_boot_intro_setting(self):
+        self.assertTrue(self.rig.state()["config"]["boot_intro"])
+        self.rig.post("/api/settings", {"boot_intro": False})
+        self.rig.wait(lambda s: s["config"]["boot_intro"] is False, 5, "pushed to the screen")
+        for name in ("intro.mp4", "logo-full.png", "logo-wordmark.png", "logo-mark.svg"):
+            self.assertTrue(os.path.getsize(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                         "northbolt", "static", name)) > 0, name)
+
 
 class WifiApiTests(E2EBase):
     env = {"NORTHBOLT_FAKE_WIFI": "1"}
