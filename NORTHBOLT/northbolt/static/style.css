@@ -83,7 +83,20 @@ svg { flex: none; }
 }
 #rail button.update::after { background: var(--warn); }
 #rail button.usb::after { background: var(--ok); }
-#rail .wicon { display: flex; }
+#rail .nav-group { display: flex; flex-direction: column; gap: 3px; }
+
+/* Wi-Fi and Settings live in the top bar */
+.tb-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 36px; padding: 0;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface-3); color: var(--muted); cursor: pointer;
+}
+.tb-btn svg { width: 21px; height: 21px; }
+.tb-btn .wlabel { display: none; }
+.tb-btn.active { background: var(--accent-soft); border-color: rgba(47, 140, 255, .45); color: var(--text); }
+.tb-btn.active svg { color: var(--accent); }
+.tb-btn.update { position: relative; }
+.tb-btn.update::after { content: ""; position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #0d1015; }
+.tb-btn .wicon { display: flex; }
 #rail-wifi.none .wicon { color: var(--warn); }
 #rail-wifi.off .wicon { color: var(--faint); }
 #rail-wifi.connected:not(.active) .wicon { color: var(--text); }
@@ -131,7 +144,8 @@ svg { flex: none; }
 #topline.paused > div { background: var(--warn); }
 
 /* ---------- content ---------- */
-#content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--gap); -webkit-overflow-scrolling: touch; }
+#content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--gap); -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+#content > * { flex: none; }
 .page { display: none; }
 .page.active { display: block; animation: fadein .18s ease-out; }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -177,8 +191,10 @@ h3 { font-size: 12px; margin: 0 0 8px; color: var(--muted); font-weight: 700; te
 .seg button[disabled] { opacity: .4; pointer-events: none; }
 
 /* ---------- home ---------- */
-.home { display: grid; grid-template-columns: minmax(0, 1fr) 232px; gap: var(--gap); align-items: stretch; min-height: calc(100vh - var(--top) - 2 * var(--gap) - 1px); }
-.hero { display: flex; flex-direction: column; gap: 12px; padding: 14px; min-height: 392px; position: relative; overflow: hidden; }
+.home { display: grid; grid-template-columns: minmax(0, 1fr) 232px; gap: var(--gap); align-items: stretch; flex: 1; }
+/* Home fills the screen below any banners, so the bottom buttons stay at the bottom edge */
+#page-home.active { display: flex; flex-direction: column; flex: 1 0 auto; }
+.hero { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; min-height: 0; position: relative; overflow: hidden; }
 .hero::after {   /* soft accent glow, top right */
   content: ""; position: absolute; right: -120px; top: -140px; width: 320px; height: 320px; border-radius: 50%;
   background: radial-gradient(circle, rgba(47, 140, 255, .10), transparent 65%); pointer-events: none;
@@ -216,7 +232,7 @@ h3 { font-size: 12px; margin: 0 0 8px; color: var(--muted); font-weight: 700; te
 .hero-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .big-time { font-size: 44px; font-weight: 800; line-height: 1.05; letter-spacing: -.03em; }
 .big-time small { font-size: 18px; font-weight: 700; color: var(--muted); letter-spacing: 0; margin-left: 2px; }
-.eta { color: var(--muted); font-size: 14px; margin-bottom: 10px; min-height: 19px; }
+.eta { color: var(--muted); font-size: 14px; margin-bottom: 10px; min-height: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .stat {
   display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 12px;
@@ -231,7 +247,7 @@ h3 { font-size: 12px; margin: 0 0 8px; color: var(--muted); font-weight: 700; te
 button.stat { width: 100%; text-align: left; font: inherit; color: inherit; }
 .stat.tap .k::after { content: " ›"; }
 .k-label { color: var(--muted); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; }
-.hero-job { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; position: relative; z-index: 1; }
+.hero-job { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; position: relative; z-index: 1; }
 .hero-job .banner { margin: 0; }
 .hero-actions { margin-top: auto; }
 .hero-actions .btn { min-width: 0; }
@@ -260,7 +276,7 @@ button.stat { width: 100%; text-align: left; font: inherit; color: inherit; }
 
 /* temperature gauges */
 .side { display: flex; flex-direction: column; gap: var(--gap); }
-.gauge { display: flex; align-items: center; gap: 12px; padding: 11px 12px; cursor: pointer; position: relative; }
+.gauge { display: flex; align-items: center; gap: 12px; padding: 9px 12px; cursor: pointer; position: relative; }
 .gauge:active { transform: scale(.985); }
 .gauge.active-tool { border-color: rgba(47, 140, 255, .45); box-shadow: inset 0 0 0 1px rgba(47, 140, 255, .15); }
 .g-dial { position: relative; width: 52px; height: 52px; flex: none; }
@@ -487,6 +503,7 @@ input:focus { outline: 2px solid rgba(47, 140, 255, .5); outline-offset: 0; }
   #rail button { flex: 1; margin: 5px 1px; min-height: 0; font-size: 10px; padding: 4px 0; }
   #rail button.active::before { left: 25%; right: 25%; top: -5px; bottom: auto; width: auto; height: 3px; border-radius: 0 0 3px 3px; }
   #rail .grow { display: none; }
+  #rail .nav-group { display: contents; }
   #top-temps, #clock, .brand > span:last-child { display: none; }
   .home { grid-template-columns: minmax(0, 1fr); min-height: 0; }
   .side { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -519,3 +536,91 @@ input:focus { outline: 2px solid rgba(47, 140, 255, .5); outline-offset: 0; }
 @media (max-height: 520px) and (min-width: 641px) {
   .btn.big { min-height: 52px; }
 }
+
+/* ---------- status pill: a button that opens messages ---------- */
+button.pill { cursor: pointer; color: var(--text); }
+.pill .badge {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--warn); color: #1f1300;
+  font-size: 12px; font-weight: 800; display: inline-grid; place-items: center; margin-left: 2px;
+}
+.alert-list { display: flex; flex-direction: column; gap: 8px; }
+.alert-list .banner { margin: 0; }
+
+/* ---------- the printer's own screen ---------- */
+.kiosk, .kiosk * { cursor: none !important; }          /* touch only: no mouse arrow in the middle */
+.kiosk #content { scrollbar-width: none; }
+.kiosk #content::-webkit-scrollbar { display: none; }
+
+/* ---------- dead touch strip (body.dz, set from settings.touch_dead_zone) ----------
+   --dz-top / --dz-bottom are the strip's edges in screen pixels. Buttons stay above or below it;
+   only information is shown inside it. */
+body:not(.dz) .dz-only { display: none !important; }
+
+/* rail: Home, Files, Control above the strip; Filament, Calibrate below it */
+.dz #rail .nav-top button { min-height: 0; height: min(58px, calc((var(--dz-top) - 16px) / 3)); }
+.dz #rail .nav-bottom button { min-height: 0; height: min(58px, calc((100vh - var(--dz-bottom) - 14px) / 2)); }
+
+/* messages go behind the status pill instead of pushing the page down */
+.dz #alerts, .dz #recovery-banner { display: none !important; }
+
+/* home: two nozzle gauges above the strip, fan and spools in it, bed gauge below it */
+.dz .side { display: grid; grid-template-rows: auto auto 1fr auto; gap: 8px; }
+.dz .side-mini { grid-row: 3; align-self: center; }
+.dz #tile-bed { grid-row: 4; }
+.dz .gauge { padding: 6px 10px; gap: 10px; }
+.dz .g-dial, .dz .g-dial svg.arc { width: 40px; height: 40px; }
+.dz .g-icon svg { width: 18px; height: 18px; }
+.dz .g-body { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+.dz .g-label { width: 100%; }
+.dz .g-val { font-size: 22px; }
+.dz .g-target { font-size: 12px; }
+.dz .hero-idle { justify-content: flex-start; padding-top: 4px; }
+.dz .idle-mark { width: 52px; height: 52px; margin-bottom: 6px; }
+.dz .quick { margin-top: auto; }
+.dz .qbtn { min-height: 0; height: min(92px, calc(100vh - var(--dz-bottom) - 32px)); gap: 6px; }
+
+/* other pages get room to be dragged, so any button can be moved out of the strip */
+.dz .page.active:not(#page-home) { min-height: calc(100% + var(--dz-bottom) - var(--dz-top)); }
+.dz .page.active:not(#page-home)::after { content: ""; display: block; height: calc(var(--dz-bottom) - var(--dz-top)); }
+
+/* dialogs: content above the strip, buttons below it, nothing inside it */
+.dz #modal-root .backdrop { align-items: stretch; }
+.dz .modal {
+  height: 100vh; max-height: 100vh; border-radius: 0; border: 0; display: flex; flex-direction: column; padding: 12px 14px 10px;
+}
+.dz .modal::before { display: none; }
+.dz .modal h2 { margin: 0 0 6px; }
+.dz .modal .body { max-height: calc(var(--dz-top) - 52px); overflow-y: auto; flex: none; }
+.dz .modal .actions { margin-top: auto; }
+.dz .modal .thumb { width: 100px !important; height: 100px !important; }
+.dz .modal .dz-note {
+  position: absolute; left: 0; right: 0; top: var(--dz-top); height: calc(var(--dz-bottom) - var(--dz-top));
+  display: grid; place-items: center; color: var(--faint); font-size: 12.5px; pointer-events: none;
+}
+
+/* keyboard: three key rows above the strip, two below it, the hint inside it */
+.dz .modal.wide { padding: 10px 12px; }
+.dz .modal.wide h2 { display: none; }
+.dz .modal.wide .body { max-height: none; overflow: visible; flex: 1; display: flex; }
+.dz .osk { flex: 1; display: flex; flex-direction: column; }
+.dz .osk-field { margin-bottom: 6px; }
+.dz .osk-value { min-height: 44px; }
+.dz .osk-rows { flex: 1; gap: 5px; }
+.dz .osk-row button { height: min(48px, calc((var(--dz-top) - 82px) / 3)); }
+.dz .osk-row.low button { height: min(52px, calc((100vh - var(--dz-bottom) - 22px) / 2)); }
+.dz .osk-gap { flex: 1; display: grid; place-items: center; }
+.dz .osk-gap .osk-hint { margin: 0; }
+
+/* ---------- touch test ---------- */
+#touchtest { position: fixed; inset: 0; z-index: 90; background: #05070a; touch-action: none; user-select: none; }
+#touchtest .tt-strips { position: absolute; inset: 0; display: flex; flex-direction: column; }
+#touchtest .tt-strip { flex: 1; background: rgba(255, 77, 79, .16); border-bottom: 1px solid rgba(255, 255, 255, .05); }
+#touchtest .tt-strip.hit { background: rgba(47, 210, 122, .32); }
+#touchtest .tt-bar { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
+#touchtest .tt-top { top: 0; }
+#touchtest .tt-bottom { bottom: 0; }
+#touchtest .tt-msg {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 90vw); text-align: center;
+  pointer-events: none; font-size: 15px; line-height: 1.45; color: var(--text); text-shadow: 0 1px 3px #000;
+}
+#touchtest .tt-msg b { color: var(--warn); }

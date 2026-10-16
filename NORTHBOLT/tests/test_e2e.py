@@ -301,6 +301,18 @@ class ApiTests(E2EBase):
         st = self.rig.wait(lambda s: s["connection"]["ready"] and not s["connection"]["halted"], 30, "reset")
         self.assertFalse(self.rig.admin("state")["dead"])
 
+    def test_touch_dead_zone_setting(self):
+        self.assertIsNone(self.rig.state()["config"]["touch_dead_zone"])
+        self.rig.post("/api/settings", {"touch_dead_zone": {"top": "200", "bottom": 355}})
+        self.assertEqual(self.rig.get("/api/settings")["touch_dead_zone"], {"top": 200, "bottom": 355})
+        self.rig.wait(lambda s: s["config"]["touch_dead_zone"] == {"top": 200, "bottom": 355}, 5, "pushed to the screen")
+        for bad in ({"top": 300, "bottom": 200}, {"top": 10}, "middle", {"top": -5, "bottom": 40}):
+            r = self.rig.post("/api/settings", {"touch_dead_zone": bad}, expect_ok=False)
+            self.assertEqual(r["status"], 400, bad)
+        self.assertEqual(self.rig.get("/api/settings")["touch_dead_zone"], {"top": 200, "bottom": 355})
+        self.rig.post("/api/settings", {"touch_dead_zone": None})
+        self.assertIsNone(self.rig.get("/api/settings")["touch_dead_zone"])
+
 
 class WifiApiTests(E2EBase):
     env = {"NORTHBOLT_FAKE_WIFI": "1"}

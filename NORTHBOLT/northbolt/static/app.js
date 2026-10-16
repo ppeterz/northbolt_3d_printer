@@ -9,6 +9,26 @@ try { apiKey = localStorage.getItem('northbolt-apikey'); } catch (e) { /* storag
 
 // The Pi's own screen loads the UI from localhost and has no system keyboard. Add ?osk=1 to force it elsewhere.
 const KIOSK = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname) || /[?&]osk=1/.test(location.search);
+if (KIOSK) document.body.classList.add('kiosk');
+
+// A strip of the Pi's touch panel that doesn't respond (settings.touch_dead_zone, measured by the
+// touch test). Only the printer's own screen uses it: phones and computers keep the normal layout.
+// ?dz=200,355 tries a strip on any device.
+const DZ_FORCE = (/[?&]dz=(\d+),(\d+)/.exec(location.search) || []).slice(1).map(Number);
+function deadZone() {
+  if (DZ_FORCE.length === 2) return { top: DZ_FORCE[0], bottom: DZ_FORCE[1] };
+  return KIOSK && S && S.config && S.config.touch_dead_zone || null;
+}
+function applyDeadZone() {
+  const dz = deadZone();
+  const sig = dz ? `${dz.top},${dz.bottom}` : '';
+  if (document.body.dataset.dz === sig) return;
+  document.body.dataset.dz = sig;
+  document.body.classList.toggle('dz', !!dz);
+  const st = document.documentElement.style;
+  if (dz) { st.setProperty('--dz-top', `${dz.top}px`); st.setProperty('--dz-bottom', `${dz.bottom}px`); }
+  else { st.removeProperty('--dz-top'); st.removeProperty('--dz-bottom'); }
+}
 
 let S = null;            // latest state from the server
 let files = [];
@@ -78,6 +98,7 @@ function modal({ title, body, actions = [], onClose, sticky = false, wide = fals
   const box = $('.modal', back);
   if (wide) box.classList.add('wide');
   if (!actions.length) $('.actions', box).remove();
+  if (deadZone() && !wide) box.appendChild(el(`<div class="dz-note">This strip of the screen doesn't respond to touch</div>`));
   $('h2', box).textContent = title;
   const b = $('.body', box);
   if (typeof body === 'string') b.innerHTML = body; else if (body) b.appendChild(body);
@@ -181,8 +202,14 @@ function osk({ title = 'Type', value = '', password = false, placeholder = '', m
     const drawKeys = () => {
       const rows = $('.osk-rows', body);
       rows.innerHTML = '';
-      for (const row of OSK_LAYOUTS[layout]) {
-        const r = el('<div class="osk-row"></div>');
+      const split = !!deadZone();
+      OSK_LAYOUTS[layout].forEach((row, i) => {
+        if (split && i === 3) {   // the last two rows go below the dead strip, the hint sits in it
+          const gap = el('<div class="osk-gap"></div>');
+          gap.appendChild(hintEl);
+          rows.appendChild(gap);
+        }
+        const r = el(`<div class="osk-row${split && i >= 3 ? ' low' : ''}"></div>`);
         for (const k of row) {
           let cls = '';
           if (k === '{space}') cls = 'space';
@@ -194,7 +221,7 @@ function osk({ title = 'Type', value = '', password = false, placeholder = '', m
           r.appendChild(b);
         }
         rows.appendChild(r);
-      }
+      });
     };
     const type = ch => {
       if (text.length >= maxLength) { setHint(`At most ${maxLength} characters`, true); return; }
@@ -985,7 +1012,7 @@ let fwPromptQuietUntil = 0;
 function renderFirmwarePrompt() {
   const fu = S.firmware_update;
   const a = fu && fu.available;
-  $('#rail [data-page="settings"]').classList.toggle('update', !!(a && a.tag !== fu.skipped_tag));
+  $('.tb-btn[data-page="settings"]').classList.toggle('update', !!(a && a.tag !== fu.skipped_tag));
   const want = fu && fu.prompt && a && Date.now() > fwPromptQuietUntil;
   if (!want) {
     if (fwPromptModal && !(fu && fu.prompt)) { fwPromptModal.close(); fwPromptModal = null; }
@@ -1030,7 +1057,7 @@ function connectWS() {
 // ------------------------------------------------------------------ navigation
 function updateRail() {
   const key = page === 'settings' && ui.tab === 'wifi' ? 'wifi' : page;
-  $$('#rail button').forEach(b => b.classList.toggle('active', b.dataset.page === key));
+  $$('#rail button, .tb-btn').forEach(b => b.classList.toggle('active', b.dataset.page === key));
 }
 
 function showPage(name) {
@@ -1040,6 +1067,10 @@ function showPage(name) {
   updateRail();
   $$('.page').forEach(p => p.classList.toggle('active', p.id === `page-${name}`));
   $('#content').scrollTop = 0;
+  if (deadZone() && name !== 'home' && !ui.dzTip) {
+    ui.dzTip = true;
+    toast('Tip: drag the page up or down to move a button out of the dead strip');
+  }
   if (name === 'files') loadFiles();
   if (name === 'settings') loadSettings();
   render();
@@ -1072,6 +1103,7 @@ function heating() {
 }
 
 function render() {
+  if (S) applyDeadZone();
   renderTop();
   if (!S) return;
   bindTemps();
@@ -1131,7 +1163,8 @@ function renderTop() {
   renderRailWifi();
   const [text, cls] = statusOf();
   const pill = $('#status-pill');
-  pill.textContent = text;
+  const n = S && !S._stale && deadZone() ? messageCount() : 0;
+  pill.innerHTML = esc(text) + (n ? ` <b class="badge">${n}</b>` : '');
   pill.className = `pill ${cls}`;
   // thin progress line under the top bar, visible on every page while a job runs
   const line = $('#topline');
@@ -1154,7 +1187,7 @@ function bindTemps() {
     const t = S.temps[k];
     if (!t) continue;
     if (field === 'actual') node.textContent = fmtT(t.actual);
-    else node.textContent = t.target ? `Target ${fmtT(t.target)}°C` : 'Off';
+    else node.textContent = t.target ? (deadZone() ? `→ ${fmtT(t.target)}°` : `Target ${fmtT(t.target)}°C`) : 'Off';
   }
   // Gauge rings: towards the target while heating, otherwise against the heater's usable range.
   const CIRC = 138.2;   // 2πr for r = 22
@@ -1171,23 +1204,46 @@ function bindTemps() {
   }
 }
 
-function renderAlerts() {
-  const box = $('#alerts');
-  const sig = JSON.stringify(S.alerts.map(a => [a.id, a.text]));
-  if (box.dataset.sig === sig) return;
-  box.dataset.sig = sig;
-  box.innerHTML = '';
+function alertBanners(all = false) {
+  const out = [];
   const conn = S.connection;
-  for (const a of S.alerts.slice(-3)) {
+  for (const a of all ? S.alerts : S.alerts.slice(-3)) {
     const extra = a.key === 'halted' ? '<button class="btn small" data-act="reconnect">Reconnect</button>'
       : a.key === 'stopped' ? '<button class="btn small" data-act="m999">Restart</button>' : '';
-    box.appendChild(el(`<div class="banner ${a.level}"><div class="text">${esc(a.text)}</div>${extra}
-      <button class="x" data-dismiss="${a.id}" aria-label="Dismiss">×</button></div>`));
+    out.push(`<div class="banner ${a.level}"><div class="text">${esc(a.text)}</div>${extra}
+      <button class="x" data-dismiss="${a.id}" aria-label="Dismiss">×</button></div>`);
   }
   if (!conn.ready && conn.error && !S.alerts.length) {
-    box.appendChild(el(`<div class="banner info"><div class="text">Printer not connected: ${esc(conn.error)}</div>
-      <button class="btn small" data-act="connect">Connect</button></div>`));
+    out.push(`<div class="banner info"><div class="text">Printer not connected: ${esc(conn.error)}</div>
+      <button class="btn small" data-act="connect">Connect</button></div>`);
   }
+  return out;
+}
+
+function messageCount() {
+  return alertBanners(true).length + (S.recovery ? 1 : 0);
+}
+
+function renderAlerts() {
+  const box = $('#alerts');
+  const html = alertBanners().join('');
+  if (box.dataset.html === html) return;
+  box.dataset.html = html;
+  box.innerHTML = html;
+}
+
+/** Everything the banners would show, in one sheet opened from the status pill. */
+function alertsDialog() {
+  if (!S) return;
+  const items = alertBanners(true);
+  if (S.recovery) {
+    items.unshift(`<div class="banner warning"><div class="text"><b>A print was interrupted by a power cut.</b></div>
+      <button class="btn small warn" data-act="recovery-resume">Resume…</button></div>`);
+  }
+  const [text] = statusOf();
+  const body = el(`<div class="alert-list">${items.length ? items.join('') : `<div class="muted">No messages. Printer status: ${esc(text)}.</div>`}</div>`);
+  const m = modal({ title: 'Messages', body, actions: [{ label: 'Close' }] });
+  body.addEventListener('click', e => { if (e.target.closest('button')) setTimeout(() => m.close(), 0); });
 }
 
 function renderRecoveryPrompt() {
@@ -1317,7 +1373,7 @@ function renderHome() {
   if (active && j.remaining && j.state !== 'paused') {
     const t = new Date(Date.now() + j.remaining * 1000);
     $('#job-eta').textContent = `Done at about ${t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
-  } else if (j.state === 'finished') $('#job-eta').textContent = 'Let the bed cool before taking the part off.';
+  } else if (j.state === 'finished') $('#job-eta').textContent = 'Let the bed cool before removing it';
   else $('#job-eta').textContent = '';
 
   $('#job-layer').textContent = j.layer ? `${j.layer}${j.layers ? ' / ' + j.layers : ''}` : '–';
@@ -1345,6 +1401,7 @@ function renderHome() {
   $('#btn-filament').classList.toggle('hidden', j.state !== 'paused');
   $('#btn-cancel').classList.toggle('hidden', !active || j.state === 'cancelling');
   $('#btn-done').classList.toggle('hidden', !ended);
+  $('#btn-tune').classList.toggle('hidden', !active);
   $('#btn-again').classList.toggle('hidden', !ended);
   $('#btn-again').disabled = !ready;
   $('#btn-done').dataset.key = endKey;
@@ -1762,6 +1819,11 @@ function connectionCard() {
 function systemCard() {
   const urls = (system.ips || []).map(ip => `http://${ip}:${system.port}`);
   const card = el(`<div class="stack">
+    <div class="card row between" style="gap:12px">
+      <div style="min-width:0"><h3 style="margin:0 0 4px">Touch screen</h3><div class="muted" style="font-size:13.5px" id="sys-touch-state"></div></div>
+      <div class="row">${KIOSK ? `<button class="btn" id="sys-touch-clear">Clear</button>
+        <button class="btn primary" id="sys-touch-test">Touch test</button>` : ''}</div>
+    </div>
     <div class="card stack"><h3>Use from a phone or computer</h3>
       ${urls.length ? urls.map(u => `<div class="num" style="font-size:18px">${esc(u)}</div>`).join('') : '<div class="muted">No network address found.</div>'}
       ${system.api_key ? `<div class="row between"><span class="muted">API key (also for slicer upload)</span><b class="num" style="user-select:text">${esc(system.api_key)}</b></div>` : ''}
@@ -1771,6 +1833,18 @@ function systemCard() {
     <div class="row wrap"><button class="btn" id="sys-reload">Reload screen</button><button class="btn danger" id="sys-off">Turn printer off</button>
       <span class="muted">NORTHBOLT ${esc(system.version)}</span></div></div>`);
   $('#sys-key-field', card).appendChild(fieldNode(tog('require_key_remote', 'Require the API key on other devices', 'This screen never needs it')));
+  const tz = settings.touch_dead_zone;
+  $('#sys-touch-state', card).textContent = tz
+    ? `A strip from ${tz.top} to ${tz.bottom} px down doesn't respond. The printer's screen keeps its buttons out of it.`
+    : (KIOSK ? 'The whole panel is used. If part of it ignores taps, run the touch test.' : 'Run the touch test on the printer\'s own screen.');
+  if (KIOSK) {
+    $('#sys-touch-test', card).onclick = () => touchTest();
+    $('#sys-touch-clear', card).onclick = e => act(e.currentTarget, async () => {
+      settings = await post('/api/settings', { touch_dead_zone: null });
+      toast('Using the whole screen again');
+      buildTab('system');
+    });
+  }
   $('#sys-reload', card).onclick = () => location.reload();
   $('#sys-off', card).onclick = async () => {
     const printing = S && !['idle', 'finished', 'cancelled', 'error'].includes(S.job.state);
@@ -1779,6 +1853,78 @@ function systemCard() {
     }
   };
   return card;
+}
+
+/**
+ * Touch test: the screen is cut into thin horizontal strips that turn green when touched. Sliding a
+ * finger from top to bottom finds the strip that never responds, and Save stores it so the printer's
+ * screen keeps buttons out of it. Cancel and Save are at the top and the bottom edges.
+ */
+function touchTest() {
+  const H = window.innerHeight;
+  const N = Math.max(12, Math.round(H / 16));
+  const hit = new Array(N).fill(false);
+  const ov = el(`<div id="touchtest">
+    <div class="tt-strips">${'<div class="tt-strip"></div>'.repeat(N)}</div>
+    <div class="tt-msg"></div>
+    <div class="tt-bar tt-top"><button class="btn" data-tt="cancel">Cancel</button><span class="spacer"></span>
+      <button class="btn" data-tt="reset">Start again</button><button class="btn primary" data-tt="save">Save</button></div>
+    <div class="tt-bar tt-bottom"><button class="btn" data-tt="cancel">Cancel</button><span class="spacer"></span>
+      <button class="btn primary" data-tt="save">Save</button></div>
+  </div>`);
+  const strips = $$('.tt-strip', ov);
+  const msg = $('.tt-msg', ov);
+  // the longest run of strips that never responded, ignoring the two at each edge (the bezel)
+  const deadRun = () => {
+    let best = null, start = -1;
+    for (let i = 2; i <= N - 2; i++) {
+      const dead = i < N - 2 && !hit[i];
+      if (dead && start < 0) start = i;
+      if (!dead && start >= 0) { if (!best || i - start > best[1] - best[0]) best = [start, i]; start = -1; }
+    }
+    if (!best) return null;
+    const h = H / N;
+    return { top: Math.max(0, Math.round(best[0] * h) - 6), bottom: Math.min(H, Math.round(best[1] * h) + 6) };
+  };
+  const enough = () => hit.filter(Boolean).length >= N * 0.5;
+  const update = () => {
+    const r = deadRun();
+    if (!enough()) {
+      msg.innerHTML = 'Slide a finger slowly from the <b>top edge to the bottom edge</b>, in two or three places.<br>Strips turn green where the screen feels your finger.';
+    } else if (r) {
+      msg.innerHTML = `<b>Not responding: ${r.top} to ${r.bottom} px</b> from the top.<br>Press Save and the screen keeps its buttons out of that strip.`;
+    } else {
+      msg.innerHTML = 'Every strip responds. Save to use the whole screen.';
+    }
+  };
+  const mark = y => {
+    const i = Math.min(N - 1, Math.max(0, Math.floor(y / H * N)));
+    if (hit[i]) return;
+    hit[i] = true;
+    strips[i].classList.add('hit');
+    update();
+  };
+  ov.addEventListener('pointerdown', e => mark(e.clientY));
+  ov.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') mark(e.clientY); });
+  ov.addEventListener('click', async e => {
+    const b = e.target.closest('[data-tt]');
+    if (!b) return;
+    const what = b.dataset.tt;
+    if (what === 'cancel') ov.remove();
+    else if (what === 'reset') { hit.fill(false); strips.forEach(s => s.classList.remove('hit')); update(); }
+    else if (what === 'save') {
+      if (!enough()) { toast('Slide over the whole screen first', 'error'); return; }
+      const r = deadRun();
+      await act(b, async () => {
+        settings = await post('/api/settings', { touch_dead_zone: r });
+        ov.remove();
+        toast(r ? 'Saved: buttons now stay out of that strip' : 'Saved: using the whole screen');
+        if (page === 'settings') buildTab(ui.tab);
+      });
+    }
+  });
+  update();
+  document.body.appendChild(ov);
 }
 
 function renderSettingsLive() {
@@ -1832,6 +1978,7 @@ const ACTIONS = {
     }
   },
   tune: () => tuneDialog(),
+  alerts: () => alertsDialog(),
   preheat: () => preheatDialog(),
   'job-done': b => {
     ui.doneJob = b.dataset.key;

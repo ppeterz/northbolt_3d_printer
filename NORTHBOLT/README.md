@@ -50,56 +50,53 @@ as a backup. It's the only copy of the stock Skriware software, and putting it b
 
 ### 1. Keep the original card safe
 
-- **Read it first.** Do steps 2 and 5 before you put it away, because they read from it.
 - **Label it.** Then, whenever it is in a computer, slide the SD adapter's lock switch to *Lock* if it has one.
 - **Never format it.** Windows can't read its Linux partition and will offer to format it. Always click **Cancel**.
+- **Never copy files from it to the new card.** `cmdline.txt` names the card's own Linux partition, and
+  `config.txt` must match the system on the card. Copied over, either one stops the new card from starting.
 
-### 2. Copy the screen settings from the original card
+### 2. The screen needs no settings
 
-Put the old card in your PC. Open the small drive Windows shows, which is the boot partition, and open `config.txt` in Notepad.
-Note any lines about the screen or serial port, such as `dtoverlay=...`, `display_rotate`, `lcd_rotate`,
-`hdmi_...` and `enable_uart=1`. Eject the card.
-
-**What the stock Skriware 2 card contains:** an 800×480 HDMI screen set with a custom mode, I2C on, SPI on,
-the legacy camera firmware (`start_x=1`), `gpu_mem=256`, and no `enable_uart`. So the printer board is on USB.
-On the new card you only need the screen lines below. Leave out `gpu_mem=256` (it takes RAM Chromium needs) and `start_x=1`
-(current Raspberry Pi OS finds cameras by itself).
-
-Add to the end of the new card's `config.txt`:
-
-```
-# Skriware 2 screen: 800x480 HDMI panel (from the original card)
-hdmi_group=2
-hdmi_mode=87
-hdmi_cvt 800 480 60 6 0 0 0
-```
-
-Current Raspberry Pi OS uses the KMS display driver, which can ignore those lines. So also add this to the end of the single line in
-`cmdline.txt`, with a space before it. Keep it all on one line:
-
-```
-video=HDMI-A-1:800x480M@60
-```
-
-If the screen stays black, change it to `video=HDMI-A-1:800x480M@60D` to force the output on.
+Current Raspberry Pi OS asks the Skriware 2's 800×480 HDMI panel which mode it wants and uses it. Don't add
+`hdmi_cvt`, `hdmi_group`, `hdmi_mode` or `video=` lines: with the KMS display driver they stop this panel showing a
+picture (black or white screen). The older stock Skriware card needed them, the new one doesn't.
 
 ### 3. Prepare the new card
 
-1. In **Raspberry Pi Imager**, choose *Raspberry Pi 3* and *Raspberry Pi OS Lite (64-bit)*. Under OS customisation, set a
-   hostname (for example `northbolt`), a user and password, your Wi-Fi, and turn on SSH.
-2. After writing, Windows shows the new card's boot drive. Paste the lines from step 2 at the end of its `config.txt`.
-3. Copy this whole `NORTHBOLT` folder onto that same boot drive.
+In **Raspberry Pi Imager**, choose *Raspberry Pi 3* and **Raspberry Pi OS (other) → Raspberry Pi OS Lite (64-bit)**.
+Not the first "Raspberry Pi OS" entry: that one has a desktop, which fights the kiosk for the screen and fills an 8 GB card.
+Under **Edit settings**, set:
 
-### 4. Install
+- Hostname `northbolt`, a user name and a password. Write the password down.
+- Your Wi-Fi. A **Pi 3 Model B only has 2.4 GHz Wi-Fi**. Use a 2.4 GHz network, or a network cable.
+- **Services: Enable SSH** with password authentication.
 
-Put the new card in the Pi, power on, and log in over SSH (`ssh <user>@northbolt.local`) or with a keyboard. Run:
+Write the card and don't edit anything on it afterwards.
+
+### 4. First start and install
+
+**Power the Pi from the printer.** A laptop USB port can't power the Pi and the screen together: the Pi resets or
+stops part-way through starting, which looks like a black or white screen and no network.
+
+Put the card in the Pi, switch the printer on and wait about 5 minutes without touching it. The first start sets up the
+user, Wi-Fi and SSH, may restart once, and ends at a `northbolt login:` prompt. Then log in over SSH
+(`ssh <user>@northbolt.local`, or PuTTY) and run, one at a time:
 
 ```bash
-cp -r /boot/firmware/NORTHBOLT ~/ && cd ~/NORTHBOLT && sudo sh deploy/install.sh
+sudo apt update && sudo apt install -y git
+```
+```bash
+git clone https://github.com/ppeterz/northbolt_3d_printer.git
+```
+```bash
+cd northbolt_3d_printer/NORTHBOLT && sudo sh deploy/install.sh
 ```
 ```bash
 sudo reboot
 ```
+
+To update NORTHBOLT later, run `git pull` in `~/northbolt_3d_printer`, then the installer again. Settings and files in
+`~/northbolt-data` are kept.
 
 Use `--no-kiosk` after `install.sh` if you only want the server, with no full-screen UI on the attached screen.
 After the reboot the screen shows the UI. From a phone, open the address shown under **Settings → System**.
@@ -154,6 +151,21 @@ For the Wi-Fi screen, the installer adds a polkit rule so the app's user can man
 On older images that use `dhcpcd`, the Wi-Fi tab says it isn't available.
 
 Settings live in `~/northbolt-data/settings.json`. Uploaded files are in `~/northbolt-data/gcodes/`.
+
+### If part of the touch panel doesn't respond
+
+Open **Settings → System → Touch test** on the printer's screen and slide a finger slowly from the top edge to the
+bottom edge in two or three places. Strips that respond turn green. **Save** stores the strip that never responded,
+and the printer's screen then keeps every button out of it:
+
+- **Side bar:** Home, Files and Control sit above the strip, Filament and Calibrate below it.
+- **Top bar:** Wi-Fi and Settings are always here.
+- **Home:** buttons above or below the strip, information inside it.
+- **Dialogs:** content above the strip, buttons below it. The on-screen keyboard splits around it.
+- **Messages:** they go behind the status label in the top bar (tap it), so they don't push the page into the strip.
+- **Other pages:** can be dragged up or down to move any button out of the strip.
+
+Phones and computers keep the normal layout. **Clear** on the same card uses the whole screen again.
 
 ### Things to set on first run
 

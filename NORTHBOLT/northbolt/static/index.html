@@ -45,23 +45,28 @@
 
 <div id="app">
   <nav id="rail">
-    <button data-page="home" class="active"><svg><use href="#i-home"/></svg>Home</button>
-    <button data-page="files"><svg><use href="#i-files"/></svg>Files</button>
-    <button data-page="control"><svg><use href="#i-move"/></svg>Control</button>
-    <button data-page="filament"><svg><use href="#i-spool"/></svg>Filament</button>
-    <button data-page="zoffset"><svg><use href="#i-z"/></svg>Calibrate</button>
+    <!-- two groups, so a dead strip across the middle of the touch panel can sit between them -->
+    <div class="nav-group nav-top">
+      <button data-page="home" class="active"><svg><use href="#i-home"/></svg>Home</button>
+      <button data-page="files"><svg><use href="#i-files"/></svg>Files</button>
+      <button data-page="control"><svg><use href="#i-move"/></svg>Control</button>
+    </div>
     <div class="grow"></div>
-    <button data-page="wifi" id="rail-wifi" class="hidden"><span class="wicon"></span><span class="wlabel">Wi-Fi</span></button>
-    <button data-page="settings"><svg><use href="#i-gear"/></svg>Settings</button>
+    <div class="nav-group nav-bottom">
+      <button data-page="filament"><svg><use href="#i-spool"/></svg>Filament</button>
+      <button data-page="zoffset"><svg><use href="#i-z"/></svg>Calibrate</button>
+    </div>
   </nav>
 
   <div id="main">
     <header id="topbar">
       <span class="brand" aria-label="NORTHBOLT"><span class="brand-mark"><svg><use href="#i-bolt"/></svg></span><span>NORTHBOLT</span></span>
-      <span id="status-pill" class="pill">Connecting</span>
+      <button id="status-pill" class="pill" data-act="alerts" title="Status and messages">Connecting</button>
       <span id="top-temps" class="num"></span>
       <span class="spacer"></span>
       <span id="clock" class="num"></span>
+      <button class="tb-btn hidden" data-page="wifi" id="rail-wifi" title="Wi-Fi"><span class="wicon"></span><span class="wlabel">Wi-Fi</span></button>
+      <button class="tb-btn" data-page="settings" title="Settings"><svg><use href="#i-gear"/></svg><span class="wlabel">Settings</span></button>
       <button id="estop" title="Emergency stop"><svg><use href="#i-stop"/></svg>STOP</button>
       <div id="topline"><div></div></div>
     </header>
@@ -125,6 +130,7 @@
                   <button class="btn big ok hidden" id="btn-resume" data-act="resume"><svg><use href="#i-play"/></svg>Resume</button>
                   <button class="btn big hidden" id="btn-filament" data-goto="filament"><svg><use href="#i-spool"/></svg>Filament</button>
                   <button class="btn big hidden" id="btn-done" data-act="job-done">Done</button>
+                  <button class="btn big dz-only hidden" id="btn-tune" data-act="tune"><svg><use href="#i-speed"/></svg>Speed</button>
                 </div>
                 <div class="row">
                   <button class="btn big danger-ghost hidden" id="btn-cancel" data-act="cancel"><svg><use href="#i-stop"/></svg>Cancel</button>

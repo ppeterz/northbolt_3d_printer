@@ -293,6 +293,7 @@ class PrinterService:
             "config": {
                 "presets": s["presets"], "bed_x": s["bed_x"], "bed_y": s["bed_y"], "z_max": s["z_max"],
                 "lift_mechanism": s["lift_mechanism"], "filament": s["filament"],
+                "touch_dead_zone": s["touch_dead_zone"],
             },
         }
 

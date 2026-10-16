@@ -19,7 +19,20 @@ MAX_UPLOAD = 1024 * 1024 * 1024
 LOCAL = ("127.0.0.1", "::1", "localhost")
 EDITABLE = {"firmware", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
             "lift_mechanism", "serial_port", "baudrate", "auto_connect", "power_button_gpio",
-            "require_key_remote"}
+            "require_key_remote", "touch_dead_zone"}
+
+
+def check_dead_zone(value):
+    """None, or {"top": int, "bottom": int} with 0 <= top < bottom <= 4000 (screen pixels)."""
+    if value is None:
+        return None
+    try:
+        top, bottom = int(value["top"]), int(value["bottom"])
+    except (TypeError, KeyError, ValueError):
+        raise ValueError("touch_dead_zone needs top and bottom in pixels") from None
+    if not 0 <= top < bottom <= 4000:
+        raise ValueError("touch_dead_zone: top must be above bottom")
+    return {"top": top, "bottom": bottom}
 
 
 def json_error(status, message):
@@ -375,6 +388,8 @@ def make_app(svc):
         bad = set(changes) - EDITABLE
         if bad:
             raise ValueError(f"Not editable: {', '.join(sorted(bad))}")
+        if "touch_dead_zone" in changes:
+            changes["touch_dead_zone"] = check_dead_zone(changes["touch_dead_zone"])
         svc.settings.update(changes)
         if "leveling" in changes:
             svc.leveling.recompute()

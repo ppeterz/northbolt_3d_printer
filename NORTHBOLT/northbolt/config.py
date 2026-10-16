@@ -109,6 +109,11 @@ DEFAULTS = {
 
     "leds": {"enabled": True, "progress": True, "brightness": 0.6},
 
+    # A strip of the Pi's touch panel that doesn't respond, in screen pixels from the top:
+    # {"top": 200, "bottom": 355}. The printer's own screen then keeps every button out of it.
+    # Measured and saved by Settings -> System -> Touch test. None: the whole panel works.
+    "touch_dead_zone": None,
+
     "scales": {
         "enabled": True,
         "interval_s": 5,
