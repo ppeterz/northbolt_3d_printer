@@ -95,8 +95,28 @@ cd northbolt_3d_printer/NORTHBOLT && sudo sh deploy/install.sh
 sudo reboot
 ```
 
-To update NORTHBOLT later, run `git pull` in `~/northbolt_3d_printer`, then the installer again. Settings and files in
-`~/northbolt-data` are kept.
+### Updating NORTHBOLT
+
+After the first install, NORTHBOLT updates itself from your GitHub repository (the one under Settings → Firmware):
+
+- **It checks by itself** every 6 hours, for new commits that change the `NORTHBOLT` folder. When one is newer than the
+  installed copy, the screen offers it (**Later**, **Skip this version**, **Update**), and Settings shows an orange dot.
+- **Or by hand**: **Settings → System → NORTHBOLT software → Check now / Update now**.
+
+An update takes a minute or two and refuses to start while printing. The screen shows its progress and reloads itself
+when it's done. Settings and files in `~/northbolt-data` are kept. If the boot splash or the start-up line changed, it
+asks you to restart the printer once.
+
+**How it works:** the app may start one root service, `northbolt-update.service`, and nothing else (a polkit rule). That
+service runs `deploy/northbolt-update.sh`, outside the app. It fetches only the `NORTHBOLT` folder into a root-owned copy
+(`/opt/northbolt-src`), then runs the installer from that copy with the choices of the first install
+(`/etc/northbolt/install.conf`), then restarts NORTHBOLT. Its log is in `/run/northbolt-update/log` and on the screen.
+
+Printers installed before this feature need one last update by hand. Then the screen can update itself:
+
+```bash
+cd ~/northbolt_3d_printer && git pull && cd NORTHBOLT && sudo sh deploy/install.sh
+```
 
 Use `--no-kiosk` after `install.sh` if you only want the server, with no full-screen UI on the attached screen.
 After the reboot the screen shows the UI. From a phone, open the address shown under **Settings → System**.

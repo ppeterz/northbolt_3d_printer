@@ -612,6 +612,120 @@ class UpToDateTests(FirmwareUpdateTests):
         self.assertFalse(st["firmware_update"]["prompt"])
 
 
+class SoftwareUpdateTests(E2EBase):
+    """NORTHBOLT's own update: compare the installed commit with GitHub, then run the update service."""
+    installed = "a" * 40
+    newest = "b" * 40
+    fail = False
+
+    def setUp(self):
+        import http.server
+        import json
+        import tempfile
+        import threading
+        from helpers import free_port
+        self.work = tempfile.mkdtemp(prefix="northbolt-sw-")
+        build = os.path.join(self.work, "BUILD")
+        with open(build, "w") as fh:
+            json.dump({"sha": self.installed, "time": 1792000000, "subject": "Old screen"}, fh)
+        self.status_dir = os.path.join(self.work, "status")
+        port = free_port()
+        test = self
+
+        class GitHub(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                api = "/repos/ppeterz/northbolt_3d_printer"
+                if self.path == f"{api}/commits?sha=main&path=NORTHBOLT&per_page=1":
+                    data = [{"sha": test.newest, "commit": {"message": "New splash\n\nLonger text",
+                                                             "committer": {"date": "2026-10-16T18:00:00Z"}}}]
+                elif self.path == f"{api}/compare/{test.installed}...{test.newest}":
+                    data = {"status": "ahead", "ahead_by": 2, "commits": [
+                        {"commit": {"message": "Smaller text"}}, {"commit": {"message": "New splash\n\nbody"}}]}
+                else:
+                    data = None
+                body = json.dumps(data or {}).encode()
+                self.send_response(200 if data is not None else 404)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", port), GitHub)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        here = os.path.dirname(os.path.abspath(__file__))
+        cmd = [sys.executable, os.path.join(here, "fake_update.py"), self.status_dir] + (["FAIL"] if self.fail else [])
+        self.settings = {
+            "firmware": {"github_repo": "https://github.com/ppeterz/northbolt_3d_printer",
+                         "github_api": f"http://127.0.0.1:{port}", "auto_check": False},
+            "software": {"auto_check": False, "command": cmd, "status_dir": self.status_dir},
+        }
+        self.env = {"NORTHBOLT_BUILD_FILE": build}
+        super().setUp()
+
+    def tearDown(self):
+        import shutil
+        super().tearDown()
+        self.server.shutdown()
+        shutil.rmtree(self.work, ignore_errors=True)
+
+    def test_check_offer_and_update(self):
+        st = self.rig.state()["software"]
+        self.assertEqual(st["build"]["sha"], self.installed)
+        self.assertIsNone(st["available"])
+        snap = self.rig.post("/api/software/check")
+        a = snap["available"]
+        self.assertEqual((a["short"], a["subject"], a["ahead_by"]), ("bbbbbbb", "New splash", 2))
+        self.assertEqual(a["changes"], ["New splash", "Smaller text"])    # newest first, first lines only
+        self.assertTrue(self.rig.state()["software"]["prompt"])
+        self.rig.post("/api/software/snooze", {"hours": 1})
+        self.assertFalse(self.rig.state()["software"]["prompt"])
+        self.rig.post("/api/software/update")
+        st = self.rig.wait(lambda s: (s["software"]["update"] or {}).get("state") == "done"
+                           and not s["software"]["running"], 30, "update to finish")
+        self.assertEqual(st["software"]["update"]["message"], "Updated to bbbbbbb New splash")
+        self.assertTrue(any("got bbbbbbb" in l for l in st["software"]["update"]["log"]))
+
+    def test_settings_api_cannot_change_the_update_command(self):
+        r = self.rig.post("/api/settings", {"software": {"command": ["sh", "-c", "anything"]}}, expect_ok=False)
+        self.assertEqual(r["status"], 400)
+        self.rig.post("/api/settings", {"software": {"auto_check": True}})
+        self.assertTrue(self.rig.get("/api/settings")["software"]["auto_check"])
+
+    def test_skip_this_version(self):
+        self.rig.post("/api/software/check")
+        self.rig.post("/api/software/skip")
+        st = self.rig.state()["software"]
+        self.assertEqual(st["skipped"], self.newest)
+        self.assertFalse(st["prompt"])
+
+
+class SoftwareUpToDateTests(SoftwareUpdateTests):
+    installed = "b" * 40
+
+    def test_check_offer_and_update(self):
+        snap = self.rig.post("/api/software/check")
+        self.assertIsNone(snap["available"])
+        self.assertIsNotNone(snap["last_check"])
+
+    def test_skip_this_version(self):
+        self.rig.post("/api/software/check")
+        r = self.rig.post("/api/software/skip", expect_ok=False)
+        self.assertEqual(r["status"], 400)
+
+
+class SoftwareUpdateFailsTests(SoftwareUpdateTests):
+    fail = True
+
+    def test_check_offer_and_update(self):
+        self.rig.post("/api/software/check")
+        self.rig.post("/api/software/update")
+        st = self.rig.wait(lambda s: (s["software"]["update"] or {}).get("state") == "failed", 30, "update to fail")
+        self.assertIn("Couldn't download", st["software"]["update"]["message"])
+        self.assertFalse(st["software"]["running"])
+
+
 class UsbTests(E2EBase):
     def setUp(self):
         import tempfile

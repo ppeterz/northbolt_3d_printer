@@ -109,6 +109,18 @@ DEFAULTS = {
 
     "leds": {"enabled": True, "progress": True, "brightness": 0.6},
 
+    # Updating NORTHBOLT itself from the same GitHub repository as the firmware (firmware.github_repo).
+    "software": {
+        "auto_check": True,          # look for a newer NORTHBOLT by itself and offer it on the screen
+        "check_hours": 6,
+        "first_check_s": 90,
+        "branch": "main",
+        "path": "NORTHBOLT",         # only commits that change the NORTHBOLT folder count
+        "skipped": "",               # "Skip this version" remembers the commit here
+        "command": ["systemctl", "start", "--no-block", "northbolt-update.service"],
+        "status_dir": "/run/northbolt-update",
+    },
+
     # A strip of the Pi's touch panel that doesn't respond, in screen pixels from the top:
     # {"top": 200, "bottom": 355}. The printer's own screen then keeps every button out of it.
     # Measured and saved by Settings -> System -> Touch test. None: the whole panel works.

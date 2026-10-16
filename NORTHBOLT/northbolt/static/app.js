@@ -1091,10 +1091,131 @@ function renderFirmware() {
 let fwPromptModal = null;
 let fwPromptQuietUntil = 0;
 
+/** The dot on the Settings button: a firmware or a NORTHBOLT update is available. */
+function paintUpdateDot() {
+  $('.tb-btn[data-page="settings"]').classList.toggle('update', !!(ui.fwDot || ui.swDot));
+}
+
+// ------------------------------------------------------------------ NORTHBOLT's own updates
+let swPromptModal = null;
+let swPromptQuietUntil = 0;
+let swProgressModal = null;
+
+const shortSha = sha => (sha || '').slice(0, 7);
+function recentUpdate(u) { return u && u.time && Date.now() / 1000 - u.time < 3600; }
+
+function renderSoftware() {
+  const sw = S.software;
+  if (!sw) return;
+  // the server came back on a new version (after an update): load the new screen code
+  const sha = sw.build && sw.build.sha;
+  if (ui.buildSha === undefined) ui.buildSha = sha || null;
+  else if (sha && ui.buildSha && sha !== ui.buildSha) { toast('NORTHBOLT updated, reloading the screen'); setTimeout(() => location.reload(), 800); ui.buildSha = sha; return; }
+  const a = sw.available;
+  ui.swDot = !!(a && a.sha !== sw.skipped);
+  paintUpdateDot();
+  renderSoftwareCard();
+  renderSoftwareProgress();
+  renderSoftwarePrompt();
+}
+
+function renderSoftwareCard() {
+  const box = $('#sys-software');
+  if (!box) return;
+  const sw = S.software;
+  const u = sw.update;
+  const a = sw.available;
+  const sig = JSON.stringify([sw.build, a, sw.checking, sw.error, u, sw.running, sw.last_check]);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  const b = sw.build;
+  let status;
+  if (sw.running) {
+    status = `<div class="row"><div class="spinner"></div><span>${esc((u && u.state === 'running' && u.message) || 'Starting the update…')}</span></div>`;
+  } else if (u && u.state === 'failed' && recentUpdate(u)) {
+    status = `<div class="banner error" style="margin:0"><div class="text">Update failed: ${esc(u.message)}</div></div>`;
+  } else if (a) {
+    status = `<div><b>New version ${esc(a.short)}</b><span class="muted"> · ${a.date ? esc(fmtDate(Date.parse(a.date) / 1000)) : ''}</span></div>
+      <ul class="checklist" style="margin:2px 0 0">${(a.changes.length ? a.changes : [a.subject]).map(c => `<li>${esc(c)}</li>`).join('')}</ul>`;
+  } else if (u && u.state === 'done' && recentUpdate(u)) {
+    status = `<div class="row"><svg style="width:18px;height:18px;color:var(--ok)"><use href="#i-check"/></svg><span>${esc(u.message)}</span></div>`;
+  } else if (sw.checking) {
+    status = '<div class="row"><div class="spinner"></div><span>Checking GitHub…</span></div>';
+  } else if (sw.error) {
+    status = `<div class="muted" style="color:var(--warn)">${esc(sw.error)}</div>`;
+  } else if (sw.last_check) {
+    status = `<div class="muted">Up to date · checked ${esc(fmtDate(sw.last_check))}</div>`;
+  } else {
+    status = '<div class="muted">Not checked yet.</div>';
+  }
+  const showLog = u && u.log && u.log.length && (sw.running || (u.state === 'failed' && recentUpdate(u)));
+  box.innerHTML = `
+    <div class="row between"><h3 style="margin:0">NORTHBOLT software</h3>
+      <span class="muted num">${b ? `${esc(shortSha(b.sha))} · ${esc(fmtDate(b.time))}` : 'Not installed from GitHub'}</span></div>
+    ${status}
+    ${showLog ? `<div class="log" style="height:110px">${u.log.map(l => `<div>${esc(l)}</div>`).join('')}</div>` : ''}
+    <div class="split-edges">
+      <button class="btn" data-act="sw-check"${sw.checking || sw.running ? ' disabled' : ''}>Check now</button>
+      <button class="btn primary" data-act="sw-update"${a && !sw.running ? '' : ' disabled'}>Update now</button>
+    </div>`;
+}
+
+function renderSoftwarePrompt() {
+  const sw = S.software;
+  const a = sw.available;
+  const want = sw.prompt && a && !sw.running && Date.now() > swPromptQuietUntil;
+  if (!want) {
+    if (swPromptModal && !sw.prompt) { swPromptModal.close(); swPromptModal = null; }
+    return;
+  }
+  if (swPromptModal || fwPromptModal) return;
+  const quiet = () => { swPromptQuietUntil = Date.now() + 5000; };
+  const changes = (a.changes.length ? a.changes : [a.subject]).slice(0, 4);
+  swPromptModal = modal({
+    title: 'NORTHBOLT update available', sticky: true,
+    body: `<p>Version <b>${esc(a.short)}</b> is in your GitHub repository${a.ahead_by ? ` (${a.ahead_by} change${a.ahead_by === 1 ? '' : 's'})` : ''}:</p>
+      <ul class="checklist" style="margin:0">${changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
+      <p class="muted" style="font-size:calc(13px * var(--ts))">Takes a minute or two. Settings and files are kept, and the screen restarts by itself.</p>`,
+    actions: [
+      { label: 'Later', onClick: async () => { quiet(); await post('/api/software/snooze', { hours: 24 }); toast('Reminding you tomorrow'); } },
+      { label: 'Skip this version', onClick: async () => { quiet(); await post('/api/software/skip'); } },
+      { label: 'Update', cls: 'primary', onClick: async () => { quiet(); await post('/api/software/update'); } },
+    ],
+    onClose: () => { swPromptModal = null; },
+  });
+}
+
+/** While an update runs: a sheet with its progress, so nobody switches the printer off meanwhile. */
+function renderSoftwareProgress() {
+  const sw = S.software;
+  const u = sw.update;
+  if (!sw.running) {
+    if (swProgressModal) {
+      swProgressModal.close();
+      swProgressModal = null;
+      if (u && u.state === 'failed') toast(`Update failed: ${u.message}`, 'error');
+    }
+    return;
+  }
+  const text = (u && u.state === 'running' && u.message) || 'Starting the update…';
+  const last = u && u.log && u.log.length ? u.log[u.log.length - 1] : '';
+  if (!swProgressModal) {
+    const body = el(`<div class="stack"><div class="row"><div class="spinner"></div><b class="sw-msg"></b></div>
+      <div class="muted num sw-line" style="font-size:calc(12px * var(--ts));overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></div>
+      <div class="muted">Leave the printer on. The screen restarts by itself when it's done.</div></div>`);
+    swProgressModal = modal({ title: 'Updating NORTHBOLT', body, sticky: true, onClose: () => { swProgressModal = null; } });
+  }
+  const m = $('.sw-msg');
+  if (m) m.textContent = text;
+  const l = $('.sw-line');
+  if (l) l.textContent = last;
+}
+
 function renderFirmwarePrompt() {
   const fu = S.firmware_update;
   const a = fu && fu.available;
-  $('.tb-btn[data-page="settings"]').classList.toggle('update', !!(a && a.tag !== fu.skipped_tag));
+  ui.fwDot = !!(a && a.tag !== fu.skipped_tag);
+  paintUpdateDot();
   const want = fu && fu.prompt && a && Date.now() > fwPromptQuietUntil;
   if (!want) {
     if (fwPromptModal && !(fu && fu.prompt)) { fwPromptModal.close(); fwPromptModal = null; }
@@ -1207,6 +1328,7 @@ function render() {
   renderUsbCopy();
   renderFirmware();
   renderFirmwarePrompt();
+  renderSoftware();
   if (page === 'settings') renderSettingsLive();
 }
 
@@ -1908,6 +2030,7 @@ function systemCard() {
       <div class="row">${KIOSK ? `<button class="btn" id="sys-touch-clear">Clear</button>
         <button class="btn primary" id="sys-touch-test">Touch test</button>` : ''}</div>
     </div>
+    <div class="card stack"><div class="stack" id="sys-software"></div><div id="sys-software-auto"></div></div>
     <div class="card stack"><h3>Use from a phone or computer</h3>
       ${urls.length ? urls.map(u => `<div class="num" style="font-size:calc(18px * var(--ts))">${esc(u)}</div>`).join('') : '<div class="muted">No network address found.</div>'}
       ${system.api_key ? `<div class="row between"><span class="muted">API key (also for slicer upload)</span><b class="num" style="user-select:text">${esc(system.api_key)}</b></div>` : ''}
@@ -1918,6 +2041,8 @@ function systemCard() {
       <span class="muted">NORTHBOLT ${esc(system.version)}</span></div></div>`);
   $('#sys-key-field', card).appendChild(fieldNode(tog('require_key_remote', 'Require the API key on other devices', 'This screen never needs it')));
   $('#sys-key-field', card).appendChild(fieldNode(tog('boot_intro', 'Play the intro when the printer starts', 'On the printer\'s own screen, after the boot splash. Tap it to skip.')));
+  $('#sys-software-auto', card).appendChild(fieldNode(tog('software.auto_check', 'Check for updates by itself',
+    'Looks at your GitHub repository every few hours and offers new versions on this screen')));
   const tz = settings.touch_dead_zone;
   $('#sys-touch-state', card).textContent = tz
     ? `A strip from ${tz.top} to ${tz.bottom} px down doesn't respond. The printer's screen keeps its buttons out of it.`
@@ -2098,6 +2223,15 @@ const ACTIONS = {
   'z-reset': () => { ui.zErrorSeen = S.zoffset.error; renderZ(); },
   'usb-up': () => { ui.usbPath = ui.usbPath.includes('/') ? ui.usbPath.slice(0, ui.usbPath.lastIndexOf('/')) : ''; loadUsb(); },
   'usb-eject': () => usbEject(),
+  'sw-check': b => act(b, async () => {
+    const snap = await post('/api/software/check');
+    toast(snap.available ? `New version ${snap.available.short} available` : 'NORTHBOLT is up to date');
+  }),
+  'sw-update': async () => {
+    if (await confirmBox('Update NORTHBOLT now?', 'Takes a minute or two. Settings and files are kept, and the screen restarts by itself.', 'Update', 'primary')) {
+      act(null, () => post('/api/software/update'));
+    }
+  },
   'console-send': () => { const i = $('#console-input'); sendConsole(i.value); i.value = ''; },
   connect: b => act(b, () => post('/api/connection/connect')),
   disconnect: b => act(b, () => post('/api/connection/disconnect')),

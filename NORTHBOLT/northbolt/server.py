@@ -17,7 +17,7 @@ log = logging.getLogger("server")
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 MAX_UPLOAD = 1024 * 1024 * 1024
 LOCAL = ("127.0.0.1", "::1", "localhost")
-EDITABLE = {"firmware", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
+EDITABLE = {"firmware", "software", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
             "lift_mechanism", "serial_port", "baudrate", "auto_connect", "power_button_gpio",
             "require_key_remote", "touch_dead_zone", "boot_intro", "text_size"}
 
@@ -406,6 +406,12 @@ def make_app(svc):
         bad = set(changes) - EDITABLE
         if bad:
             raise ValueError(f"Not editable: {', '.join(sorted(bad))}")
+        if "software" in changes:
+            # the update command and status folder stay out of reach of the API
+            allowed = {"auto_check", "check_hours", "skipped"}
+            sw = changes["software"]
+            if not isinstance(sw, dict) or set(sw) - allowed:
+                raise ValueError(f"software: only {', '.join(sorted(allowed))} can be changed here")
         if "text_size" in changes:
             size = changes["text_size"]
             if isinstance(size, bool) or not isinstance(size, (int, float)) or not 50 <= size <= 150:
@@ -498,6 +504,21 @@ def make_app(svc):
             raise web.HTTPNotFound()
         return ok(svc.fw.snapshot())
 
+    # ---------------------------------------------------------------- NORTHBOLT's own updates
+    async def software(request):
+        action = request.match_info["action"]
+        if action == "check":
+            return ok(await svc.software.check())
+        if action == "update":
+            return ok(await svc.software.start())
+        if action == "skip":
+            svc.software.skip()
+        elif action == "snooze":
+            svc.software.snooze(float((await body(request)).get("hours", 24)))
+        else:
+            raise web.HTTPNotFound()
+        return ok(svc.software.snapshot())
+
     # ---------------------------------------------------------------- OctoPrint compatibility
     async def octo_version(request):
         return ok({"api": "0.1", "server": "1.10.0", "text": f"OctoPrint 1.10.0 (NORTHBOLT {__version__})"})
@@ -537,6 +558,7 @@ def make_app(svc):
     r.add_post("/api/zoffset/{action}", zoffset)
     r.add_post("/api/leveling/{action}", leveling)
     r.add_post("/api/firmware/{action}", firmware)
+    r.add_post("/api/software/{action}", software)
     r.add_post("/api/connection/{action}", connection)
     r.add_post("/api/alerts/dismiss", dismiss)
     r.add_post("/api/scales/{action}", scales)

@@ -1,0 +1,9 @@
+[Unit]
+Description=Update NORTHBOLT from its GitHub repository (started from the printer's screen)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/northbolt-update
+TimeoutStartSec=30min

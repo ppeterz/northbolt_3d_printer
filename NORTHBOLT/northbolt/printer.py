@@ -12,6 +12,7 @@ from collections import deque
 from .gcode import quick_scan, scan_file
 from .hardware import LedPolicy, PowerButton, SkriwareBoard
 from .firmware import FirmwareUpdater
+from .software import SoftwareUpdater
 from .job import JobRunner
 from .leveling import BedLevelWizard
 from .protocol import LinkError, MarlinLink
@@ -92,6 +93,7 @@ class PrinterService:
     async def start(self):
         self.loop = asyncio.get_running_loop()
         self.fw = FirmwareUpdater(self)
+        self.software = SoftwareUpdater(self)
         self.power_button = PowerButton(
             self.settings["power_button_gpio"],
             lambda: self.loop.call_soon_threadsafe(self.on_power_request),
@@ -104,6 +106,7 @@ class PrinterService:
             asyncio.ensure_future(self._wifi_task()),
             asyncio.ensure_future(self.usb.task()),
             asyncio.ensure_future(self.fw.auto_task()),
+            asyncio.ensure_future(self.software.auto_task()),
         ]
         for name in self.list_file_names():
             if not os.path.exists(self._meta_path(name)):
@@ -281,6 +284,7 @@ class PrinterService:
             "zoffset": self.wizard.snapshot(),
             "leveling": self.leveling.snapshot(),
             "firmware_update": self.fw.snapshot() if self.fw else None,
+            "software": self.software.snapshot() if self.fw else None,
             "recovery": self.recovery.pending() if not self.job.active else None,
             "alerts": self.alerts,
             "op": self.op,
