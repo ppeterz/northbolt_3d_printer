@@ -389,5 +389,78 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(merged["pause"]["retract"], DEFAULTS["pause"]["retract"])
 
 
+class LedTests(unittest.TestCase):
+    """The LED policy sends the colour and effect set for each printer state, only when it changes."""
+
+    class Board:
+        def __init__(self):
+            self.calls = []
+
+        def lights(self, mode, rgb=(0, 0, 0)):
+            self.calls.append(("lights", mode, tuple(rgb)))
+
+        def pads(self, count, rgb):
+            self.calls.append(("pads", count, tuple(rgb)))
+
+        def center(self, rgb):
+            self.calls.append(("center", tuple(rgb)))
+
+    def make(self, **leds):
+        from northbolt.hardware import LedPolicy
+        settings = deep_merge(DEFAULTS, {"leds": dict({"brightness": 1.0}, **leds)})
+        board = self.Board()
+        return LedPolicy(board, settings), board, settings
+
+    def test_each_state_uses_its_own_colour_and_effect(self):
+        from northbolt.hardware import hex_rgb
+        policy, board, _ = self.make(events={"printing": {"mode": "on", "color": "#ffffff"},
+                                             "done": {"mode": "breathe", "color": "#00ff00"},
+                                             "error": {"mode": "flash", "color": "#ff0000"}})
+        policy.apply("printing")
+        policy.apply("printing")                       # unchanged: nothing sent again
+        policy.apply("done")
+        policy.apply("error")
+        self.assertEqual(board.calls[0], ("lights", 0, (255, 255, 255)))
+        self.assertEqual(board.calls[1], ("lights", 4, (0, 255, 0)))     # breathe
+        self.assertEqual(board.calls[2], ("lights", 5, (255, 0, 0)))     # flash
+        self.assertEqual(len(board.calls), 3)
+        self.assertEqual(hex_rgb("#0af"), (0, 170, 255))
+        self.assertEqual(hex_rgb("nonsense", (1, 2, 3)), (1, 2, 3))
+
+    def test_a_new_colour_for_the_same_state_is_sent_at_once(self):
+        policy, board, settings = self.make()
+        policy.apply("idle")
+        settings["leds"]["events"]["idle"]["color"] = "#123456"
+        policy.apply("idle")
+        self.assertEqual(board.calls[-1], ("lights", 0, (0x12, 0x34, 0x56)))
+
+    def test_off_effect_brightness_and_master_switch(self):
+        policy, board, settings = self.make(brightness=0.5, events={"idle": {"mode": "off"}})
+        policy.apply("idle")
+        self.assertEqual(board.calls[-1], ("lights", 1, (0, 0, 0)))
+        policy.apply("printing")
+        self.assertEqual(board.calls[-1], ("lights", 0, (127, 127, 127)))   # white at half brightness
+        settings["leds"]["enabled"] = False
+        policy.apply("printing")
+        self.assertEqual(board.calls[-1][:2], ("lights", 1))
+
+    def test_work_light_overrides_and_test_previews(self):
+        policy, board, settings = self.make(override={"enabled": True, "mode": "on", "color": "#ff00ff"})
+        policy.apply("printing", progress=50)
+        self.assertEqual(board.calls, [("lights", 0, (255, 0, 255))])     # no progress bar over the work light
+        settings["leds"]["override"]["enabled"] = False
+        policy.test("done", seconds=60)
+        policy.apply("printing", progress=50)
+        self.assertEqual(board.calls[-1], ("lights", 0, (0, 255, 60)))    # the test wins while it lasts
+        with self.assertRaises(ValueError):
+            policy.test("disco")
+
+    def test_progress_uses_its_colours(self):
+        policy, board, _ = self.make(progress_color="#00ff00", center_color="#0000ff")
+        policy.apply("printing", progress=50)
+        self.assertIn(("pads", 6, (0, 255, 0)), board.calls)
+        self.assertIn(("center", (0, 0, 255)), board.calls)
+
+
 if __name__ == "__main__":
     unittest.main()

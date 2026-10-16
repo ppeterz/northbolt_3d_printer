@@ -81,6 +81,9 @@ class PrinterService:
         self.flow = 100
         self.fan = 0
         self.done_since = None
+        self.led_event = None          # the LED event showing now (Settings -> LEDs marks it)
+        self._led_job_state = None
+        self._led_job_since = time.monotonic()
         self.scanning = set()
 
         self.clients = set()
@@ -288,6 +291,7 @@ class PrinterService:
             "recovery": self.recovery.pending() if not self.job.active else None,
             "alerts": self.alerts,
             "op": self.op,
+            "leds": {"event": self.led_event, "board": self.board.available},
             "runout": {"enabled": s["runout"], "status": self.runout_status},
             "scales": self.scales,
             "wifi": self.wifi_state,
@@ -329,32 +333,45 @@ class PrinterService:
 
     # ------------------------------------------------------------------ LEDs and scales
     def led_status(self):
+        """Which of the LED events (hardware.LED_EVENTS) the printer is in right now."""
+        js = self.job.state
+        if js != self._led_job_state:            # remember when the job last changed state
+            self._led_job_state = js
+            self._led_job_since = time.monotonic()
         if self.halted or self.stopped:
             return "error"
-        js = self.job.state
-        if js in ("paused", "pausing"):
-            return "attention"
         if self.power_request:
-            return "attention"
+            return "power"
+        if js in ("paused", "pausing"):
+            return "paused"
         heating = False
         for key in ("t0", "t1", "bed"):
             t = self.temps[key]
             if t["target"] and t["actual"] is not None and t["actual"] < t["target"] - 3:
                 heating = True
-        if js in ("printing", "resuming", "starting"):
+        if js in ("printing", "resuming", "starting", "cancelling"):
             return "heating" if heating else "printing"
-        if js == "finished" and self.done_since and time.monotonic() - self.done_since < 1800:
-            return "done"
         if js == "error":
             return "error"
+        if js in ("finished", "cancelled"):
+            minutes = float(self.settings["leds"].get("done_minutes", 30))
+            if time.monotonic() - self._led_job_since < minutes * 60:
+                return "done" if js == "finished" else "cancelled"
+        if self.op:
+            return "filament"
+        if self.wizard.active or self.leveling.active:
+            return "calibrating"
         return "heating" if heating else "idle"
 
     async def _led_task(self):
         while True:
             try:
                 await asyncio.sleep(1.0)
+                status = self.led_status()
+                if status != self.led_event:
+                    self.led_event = status
+                    self.notify("leds")
                 if self.board.available and self.link.ready:
-                    status = self.led_status()
                     await self.loop.run_in_executor(None, self.leds.apply, status, self.job.progress())
             except asyncio.CancelledError:
                 return

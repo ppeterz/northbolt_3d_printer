@@ -313,6 +313,20 @@ class ApiTests(E2EBase):
         self.rig.post("/api/settings", {"touch_dead_zone": None})
         self.assertIsNone(self.rig.get("/api/settings")["touch_dead_zone"])
 
+    def test_led_settings_and_test(self):
+        self.assertEqual(self.rig.state()["leds"]["event"], "idle")
+        self.rig.post("/api/settings", {"leds": {"events": {"done": {"color": "#00ff00", "mode": "breathe"}}}})
+        leds = self.rig.get("/api/settings")["leds"]
+        self.assertEqual(leds["events"]["done"], {"mode": "breathe", "color": "#00ff00"})
+        self.assertEqual(leds["events"]["printing"]["color"], "#ffffff")       # the others are untouched
+        for bad in ({"events": {"party": {"mode": "on"}}}, {"events": {"done": {"mode": "rainbow"}}},
+                    {"events": {"done": {"color": "green"}}}, {"brightness": 3}, {"colour": "#fff"}):
+            r = self.rig.post("/api/settings", {"leds": bad}, expect_ok=False)
+            self.assertEqual(r["status"], 400, bad)
+        self.rig.post("/api/leds/test", {"event": "done"})
+        r = self.rig.post("/api/leds/test", {"event": "disco"}, expect_ok=False)
+        self.assertEqual(r["status"], 400)
+
     def test_text_size_setting(self):
         self.assertEqual(self.rig.state()["config"]["text_size"], 75)
         self.rig.post("/api/settings", {"text_size": 90})

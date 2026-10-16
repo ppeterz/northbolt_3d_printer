@@ -1882,8 +1882,10 @@ const FORMS = {
       tog('recovery.use_mesh', 'Turn bed leveling back on after homing')] },
   ],
   leds: [
-    { title: 'LED lights', fields: [tog('leds.enabled', 'Status lights'), tog('leds.progress', 'Show print progress on the side lights'),
-      num('leds.brightness', 'Brightness', '', 0.1, 1, 0.1)] },
+    { title: 'LED lights', fields: [tog('leds.enabled', 'Status lights', 'Off: the lights stay dark whatever happens'),
+      num('leds.brightness', 'Brightness', '', 0.1, 1, 0.1),
+      tog('leds.progress', 'Show print progress on the side lights', 'They fill up as the print goes'),
+      num('leds.done_minutes', 'Keep "done" and "cancelled" lit for', 'min', 0, 240, 5, 'Then back to the Ready light')] },
   ],
 };
 
@@ -1959,6 +1961,7 @@ function buildTab(tab) {
     box.appendChild(el(`<div class="card muted" style="font-size:calc(14px * var(--ts))">After a power cut the printer is reheated, Z is set to where the nozzle stopped (it is never homed into the part), X and Y are homed, and printing continues from just before the last confirmed move. The lead screws hold Z while the power is off.</div>`));
   }
   if (tab === 'scales') box.appendChild(scalesCard());
+  if (tab === 'leds') box.appendChild(ledsCard());
   if (tab === 'connection') box.appendChild(connectionCard());
   if (tab === 'system') box.appendChild(systemCard());
   if (tab === 'firmware') box.appendChild(firmwareCard());
@@ -1986,6 +1989,115 @@ function presetsCard() {
   });
   $('#presets-save', card).onclick = e => act(e.currentTarget, async () => { settings = await post('/api/settings', { presets }); toast('Presets saved'); });
   return card;
+}
+
+// ------------------------------------------------------------------ LED colours
+const LED_EVENTS = [
+  ['idle', 'Ready', 'Nothing running'],
+  ['heating', 'Heating', 'Warming up, before or during a print'],
+  ['printing', 'Printing', 'While a print runs'],
+  ['paused', 'Paused', 'Paused by you, or the filament ran out'],
+  ['done', 'Done', 'The print finished'],
+  ['cancelled', 'Cancelled', 'The print was cancelled'],
+  ['error', 'Error', 'The printer stopped, or a print failed'],
+  ['filament', 'Filament', 'Loading or unloading filament'],
+  ['calibrating', 'Calibrating', 'Bed leveling or the Z offset paper test'],
+  ['power', 'Power button', 'Asking whether to turn the printer off'],
+];
+const LED_MODES = [['on', 'Solid'], ['breathe', 'Breathe'], ['flash', 'Flash'], ['off', 'Off']];
+const LED_SWATCHES = ['#ffffff', '#ffd9a8', '#ff0000', '#ff5a00', '#ff9a00', '#ffe000', '#9dff00', '#00ff3c',
+  '#00ffaa', '#00e5ff', '#00a0ff', '#0040ff', '#5a2dff', '#b98bff', '#ff2d95', '#ff00ff'];
+
+function hsvHex(h, s = 1, v = 1) {
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return '#' + [f(5), f(3), f(1)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+
+/** Pick a colour: preset swatches plus a hue slider. Resolves to '#rrggbb' or null. */
+function colorPicker(title, current) {
+  return new Promise(resolve => {
+    let chosen = current || '#ffffff';
+    const body = el(`<div class="stack" style="gap:10px">
+      <div class="swatch-grid">${LED_SWATCHES.map(c => `<button class="swatch" type="button" data-pick="${c}" style="--c:${c}"></button>`).join('')}</div>
+      <div class="row"><span class="swatch big" id="pick-now"></span>
+        <input type="range" min="0" max="359" value="0" id="pick-hue" class="hue" aria-label="Any colour"></div>
+    </div>`);
+    const now = $('#pick-now', body);
+    const show = () => { now.style.setProperty('--c', chosen); $$('[data-pick]', body).forEach(b => b.classList.toggle('on', b.dataset.pick === chosen)); };
+    body.addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if (b) { chosen = b.dataset.pick; show(); } });
+    $('#pick-hue', body).addEventListener('input', e => { chosen = hsvHex(Number(e.target.value)); show(); });
+    show();
+    let done = false;
+    modal({
+      title, body,
+      actions: [{ label: 'Cancel' }, { label: 'Use this colour', cls: 'primary', onClick: () => { done = true; resolve(chosen); } }],
+      onClose: () => { if (!done) resolve(null); },
+    });
+  });
+}
+
+/** Save one LED setting straight away, then show it on the printer for a few seconds. */
+async function ledSave(changes, testEvent) {
+  try {
+    settings = await post('/api/settings', { leds: changes });
+    if (testEvent) await post('/api/leds/test', { event: testEvent });
+  } catch (e) { toast(e.message, 'error'); }
+  if (page === 'settings' && ui.tab === 'leds') buildTab('leds');
+}
+
+function ledLookRow(key, label, hint, look, path) {
+  return `<div class="led-row" data-ev="${key}">
+    <div class="lab">${esc(label)} <span class="tag active led-now">Now</span><small>${esc(hint)}</small></div>
+    <button class="swatch" type="button" data-led-color="${path}" data-led-ev="${key}" style="--c:${esc(look.color)}" aria-label="Colour"></button>
+    <div class="seg">${LED_MODES.map(([m, l]) => `<button type="button" data-led-mode="${m}" data-led-path="${path}" data-led-ev="${key}"
+      class="${look.mode === m ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <button class="btn small" type="button" data-led-test="${key}">Test</button>
+  </div>`;
+}
+
+function ledsCard() {
+  const cfg = settings.leds;
+  const box = el(`<div class="stack">
+    <div class="banner warning hidden" id="led-noboard" style="margin:0"><div class="text">The LED board isn't answering on I2C. Colours are saved and used once it does.</div></div>
+    <div class="card stack">
+      <div class="row between"><h3 style="margin:0">Work light</h3><label class="switch"><input type="checkbox" id="led-override"${cfg.override.enabled ? ' checked' : ''}><span></span></label></div>
+      <div class="muted" style="font-size:calc(13px * var(--ts))">One colour all the time, whatever the printer does. Turn it off to go back to the lights below.</div>
+      ${ledLookRow('override', 'Work light colour', 'Used while the switch above is on', cfg.override, 'override')}
+    </div>
+    <div class="card stack">
+      <h3 style="margin:0">A light for each moment</h3>
+      ${LED_EVENTS.map(([k, l, h]) => ledLookRow(k, l, k === 'done' || k === 'cancelled' ? `${h}, for ${cfg.done_minutes} min` : h,
+        cfg.events[k] || { mode: 'on', color: '#ffffff' }, `events.${k}`)).join('')}
+    </div>
+    <div class="card stack">
+      <h3 style="margin:0">Print progress</h3>
+      <div class="led-row"><div class="lab">Side lights<small>Fill up as the print goes</small></div>
+        <button class="swatch" type="button" data-led-color="progress_color" data-led-ev="printing" style="--c:${esc(cfg.progress_color)}" aria-label="Colour"></button></div>
+      <div class="led-row"><div class="lab">Centre bar<small>While the progress shows</small></div>
+        <button class="swatch" type="button" data-led-color="center_color" data-led-ev="printing" style="--c:${esc(cfg.center_color)}" aria-label="Colour"></button></div>
+    </div>
+  </div>`);
+  $('#led-override', box).addEventListener('change', e => ledSave({ override: { enabled: e.target.checked } }));
+  box.addEventListener('click', async e => {
+    const c = e.target.closest('[data-led-color]');
+    const m = e.target.closest('[data-led-mode]');
+    const t = e.target.closest('[data-led-test]');
+    const nest = (path, v) => path.split('.').reverse().reduce((acc, k) => ({ [k]: acc }), v);
+    if (c) {
+      const path = c.dataset.ledColor;
+      const cur = path.includes('.') || path === 'override' ? getPath(cfg, (path === 'override' ? 'override' : path) + '.color') : cfg[path];
+      const label = (LED_EVENTS.find(x => x[0] === c.dataset.ledEv) || [0, 'Light'])[1];
+      const picked = await colorPicker(`Colour: ${path === 'progress_color' ? 'side lights' : path === 'center_color' ? 'centre bar' : path === 'override' ? 'work light' : label}`, cur);
+      if (!picked) return;
+      const change = path === 'progress_color' || path === 'center_color' ? { [path]: picked } : nest(`${path}.color`, picked);
+      ledSave(change, path === 'override' ? 'override' : c.dataset.ledEv);
+    } else if (m) {
+      ledSave(nest(`${m.dataset.ledPath}.mode`, m.dataset.ledMode), m.dataset.ledPath === 'override' ? 'override' : m.dataset.ledEv);
+    } else if (t) {
+      act(t, async () => { await post('/api/leds/test', { event: t.dataset.ledTest }); toast('Showing it on the printer for a few seconds'); });
+    }
+  });
+  return box;
 }
 
 function scalesCard() {
@@ -2139,6 +2251,12 @@ function touchTest() {
 
 function renderSettingsLive() {
   if (!settings) return;
+  if (ui.tab === 'leds' && S.leds) {
+    const now = settings.leds.override.enabled ? 'override' : S.leds.event;
+    $$('#tab-leds .led-row[data-ev]').forEach(r => r.classList.toggle('now', r.dataset.ev === now));
+    const nb = $('#led-noboard');
+    if (nb) nb.classList.toggle('hidden', !!S.leds.board);
+  }
   if (ui.tab === 'scales') {
     for (const side of ['left', 'right']) {
       const card = $(`[data-scale="${side}"]`);

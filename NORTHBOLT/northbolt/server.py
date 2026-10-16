@@ -5,12 +5,14 @@ import base64
 import json
 import logging
 import os
+import re
 import tempfile
 
 from aiohttp import WSMsgType, web
 
 from . import __version__
 from .gcode import quick_scan
+from .hardware import LED_EVENTS, LED_MODES
 from .printer import safe_filename
 
 log = logging.getLogger("server")
@@ -38,6 +40,46 @@ def write_boot_js(settings):
             fh.write(text)
     except OSError as e:
         log.warning("Could not write %s: %s", path, e)
+
+
+def check_leds(value):
+    """Settings -> LEDs: only known lights, effects and #rrggbb colours."""
+    if not isinstance(value, dict):
+        raise ValueError("leds must be an object")
+
+    def colour(where, c):
+        if not isinstance(c, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", c):
+            raise ValueError(f"leds {where}: colours look like #ff8800")
+
+    def look(where, ev, extra=()):
+        if not isinstance(ev, dict) or set(ev) - {"mode", "color", *extra}:
+            raise ValueError(f"leds {where}: use mode and color")
+        if "mode" in ev and ev["mode"] not in LED_MODES:
+            raise ValueError(f"leds {where}: mode is one of {', '.join(LED_MODES)}")
+        if "color" in ev:
+            colour(where, ev["color"])
+
+    for key, v in value.items():
+        if key == "events":
+            if not isinstance(v, dict) or set(v) - set(LED_EVENTS):
+                raise ValueError(f"leds events: the lights are {', '.join(LED_EVENTS)}")
+            for name, ev in v.items():
+                look(name, ev)
+        elif key == "override":
+            look("override", v, extra=("enabled",))
+        elif key in ("enabled", "progress"):
+            if not isinstance(v, bool):
+                raise ValueError(f"leds {key}: true or false")
+        elif key == "brightness":
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1:
+                raise ValueError("leds brightness: 0 to 1")
+        elif key == "done_minutes":
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1440:
+                raise ValueError("leds done_minutes: 0 to 1440")
+        elif key in ("progress_color", "center_color"):
+            colour(key, v)
+        else:
+            raise ValueError(f"leds: unknown setting {key}")
 
 
 def check_dead_zone(value):
@@ -406,6 +448,8 @@ def make_app(svc):
         bad = set(changes) - EDITABLE
         if bad:
             raise ValueError(f"Not editable: {', '.join(sorted(bad))}")
+        if "leds" in changes:
+            check_leds(changes["leds"])
         if "software" in changes:
             # the update command and status folder stay out of reach of the API
             allowed = {"auto_check", "check_hours", "skipped"}
@@ -504,6 +548,12 @@ def make_app(svc):
             raise web.HTTPNotFound()
         return ok(svc.fw.snapshot())
 
+    # ---------------------------------------------------------------- LEDs
+    async def leds_test(request):
+        """Settings -> LEDs -> Test: show one light's colour and effect for a few seconds."""
+        svc.leds.test((await body(request)).get("event"))
+        return ok()
+
     # ---------------------------------------------------------------- NORTHBOLT's own updates
     async def software(request):
         action = request.match_info["action"]
@@ -562,6 +612,7 @@ def make_app(svc):
     r.add_post("/api/connection/{action}", connection)
     r.add_post("/api/alerts/dismiss", dismiss)
     r.add_post("/api/scales/{action}", scales)
+    r.add_post("/api/leds/test", leds_test)
     r.add_post("/api/power/{action}", power)
     r.add_get("/api/system", system)
     r.add_get("/api/settings", get_settings)

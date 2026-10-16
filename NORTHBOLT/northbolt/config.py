@@ -107,7 +107,30 @@ DEFAULTS = {
         "skipped_tag": "",          # "Skip this version" remembers the release here
     },
 
-    "leds": {"enabled": True, "progress": True, "brightness": 0.6},
+    # The printer's LED lights. Each printer state has its own colour and effect
+    # (on, breathe, flash or off); the screen edits them under Settings -> LEDs.
+    "leds": {
+        "enabled": True,
+        "brightness": 0.6,
+        "progress": True,              # side lights fill up with the print's progress
+        "progress_color": "#00a0ff",
+        "center_color": "#ffffff",     # the centre bar while the progress shows
+        "done_minutes": 30,            # how long "done" / "cancelled" stay lit after a print ends
+        "events": {
+            "idle": {"mode": "on", "color": "#5a5a5a"},
+            "heating": {"mode": "breathe", "color": "#ff7800"},
+            "printing": {"mode": "on", "color": "#ffffff"},
+            "paused": {"mode": "flash", "color": "#ffbe00"},
+            "done": {"mode": "on", "color": "#00ff3c"},
+            "cancelled": {"mode": "on", "color": "#ff5a00"},
+            "error": {"mode": "flash", "color": "#ff0000"},
+            "filament": {"mode": "breathe", "color": "#b98bff"},
+            "calibrating": {"mode": "breathe", "color": "#2f8cff"},
+            "power": {"mode": "flash", "color": "#ffbe00"},
+        },
+        # one colour all the time (a work light), whatever the printer does
+        "override": {"enabled": False, "mode": "on", "color": "#ffffff"},
+    },
 
     # Updating NORTHBOLT itself from the same GitHub repository as the firmware (firmware.github_repo).
     "software": {

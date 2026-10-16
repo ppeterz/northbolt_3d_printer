@@ -639,3 +639,37 @@ body:not(.dz) .dz-only { display: none !important; }
 }
 #splash.waiting .splash-wait { opacity: 1; }
 #splash.out { opacity: 0; pointer-events: none; }
+
+/* ---------- LED colours ---------- */
+.led-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--line);
+}
+.led-row:last-child { border-bottom: 0; }
+.led-row .lab { min-width: 0; font-weight: 650; }
+.led-row .lab small { display: block; color: var(--faint); font-size: max(9.5px, calc(12px * var(--ts))); font-weight: 500; }
+.led-row .led-now { display: none; font-size: max(9.5px, calc(10px * var(--ts))); vertical-align: 2px; margin-left: 4px; }
+.led-row.now .led-now { display: inline-block; }
+.led-row.now { background: linear-gradient(90deg, var(--accent-soft), transparent 70%); border-radius: 10px; padding-left: 8px; }
+.led-row .seg button { min-width: 0; padding: 0 9px; }
+.swatch {
+  width: 52px; height: 38px; border-radius: 10px; cursor: pointer; padding: 0;
+  background: var(--c, #fff); border: 2px solid rgba(255, 255, 255, .18); box-shadow: 0 0 14px -2px var(--c, transparent);
+}
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent), 0 0 14px -2px var(--c); }
+.swatch.big { width: 64px; height: 44px; flex: none; display: inline-block; }
+.swatch-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.swatch-grid .swatch { width: 100%; }
+input.hue {
+  flex: 1; height: 36px; -webkit-appearance: none; appearance: none; border-radius: 12px; cursor: pointer;
+  background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+input.hue::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 26px; height: 40px; border-radius: 8px; background: #fff; border: 2px solid #0008;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+}
+@media (max-width: 640px) {
+  .led-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .led-row .seg { grid-column: 1 / -1; }
+  .swatch-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

@@ -28,8 +28,12 @@ It runs the screen on the printer and is also usable from a phone or computer on
   confirmed move, without homing Z into the part.
 - **Control**: jog, home, motors off, temperatures with presets, extrude and retract, tool select, extruder lift, fan, speed and flow.
 - **Filament**: load and unload per nozzle, runout sensors on and off, and a sensor check.
-- **LED strips and spool scales** via the ATmega board on I2C: status colours, progress on the side LEDs,
-  and grams left on each spool after a one-time calibration.
+- **LED strips and spool scales** via the ATmega board on I2C: progress on the side LEDs, and grams left on each
+  spool after a one-time calibration.
+- **Your own light colours** (Settings → LEDs). Each moment has its own colour and effect (solid, breathe, flash or off):
+  Ready, heating, printing, paused, done, cancelled, error, filament, calibrating and the power button. **Test** shows
+  one on the printer for a few seconds. There's also a work light (one colour all the time), the progress colours,
+  brightness, and how long "done" stays lit.
 - **Power button**: a press on the printer asks before turning off, with a countdown when idle. It then shuts the Pi down cleanly.
 - **Wi-Fi setup on the screen**: the Wi-Fi button in the sidebar shows signal strength, "No Wi-Fi" in amber, or "Wi-Fi off".
   Tapping it lists nearby networks. Tap one and an on-screen keyboard opens for the password.
