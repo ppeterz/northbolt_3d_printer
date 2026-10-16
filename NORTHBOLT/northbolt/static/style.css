@@ -627,7 +627,9 @@ body:not(.dz) .dz-only { display: none !important; }
 }
 #splash video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 #splash .splash-logo { width: min(440px, 72vw); height: auto; opacity: 0; display: none; }
-#splash.logo-only video { display: none; }
+#splash.logo-only video, #splash.continue video { display: none; }
+#splash .splash-last { display: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+#splash.continue .splash-last { display: block; }
 #splash.logo-only .splash-logo { display: block; animation: splash-in .6s ease-out .05s forwards; }
 @keyframes splash-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
 #splash .splash-wait {

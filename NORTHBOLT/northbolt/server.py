@@ -22,6 +22,24 @@ EDITABLE = {"firmware", "leveling", "presets", "filament", "pause", "recovery", 
             "require_key_remote", "touch_dead_zone", "boot_intro"}
 
 
+def write_boot_js(settings):
+    """<data>/boot.js tells the screen's start-up page (static/boot.html, opened before this server
+    answers) whether to play the intro."""
+    path = os.path.join(settings.data_dir, "boot.js")
+    text = "window.NB_BOOT = %s;\n" % json.dumps({"intro": bool(settings["boot_intro"])})
+    try:
+        with open(path, encoding="utf-8") as fh:
+            if fh.read() == text:
+                return
+    except OSError:
+        pass
+    try:
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    except OSError as e:
+        log.warning("Could not write %s: %s", path, e)
+
+
 def check_dead_zone(value):
     """None, or {"top": int, "bottom": int} with 0 <= top < bottom <= 4000 (screen pixels)."""
     if value is None:
@@ -391,6 +409,8 @@ def make_app(svc):
         if "touch_dead_zone" in changes:
             changes["touch_dead_zone"] = check_dead_zone(changes["touch_dead_zone"])
         svc.settings.update(changes)
+        if "boot_intro" in changes:
+            write_boot_js(svc.settings)
         if "leveling" in changes:
             svc.leveling.recompute()
         if "runout" in changes and svc.link.ready:
@@ -533,6 +553,7 @@ def make_app(svc):
     r.add_static("/static", STATIC, append_version=False)
 
     async def on_startup(app):
+        write_boot_js(svc.settings)
         await svc.start()
 
     async def on_cleanup(app):

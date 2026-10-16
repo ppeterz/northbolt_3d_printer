@@ -44,6 +44,12 @@ chown -R "$APP_USER": "$APP_HOME/northbolt-data"
 
 # Serial, I2C and GPIO access
 usermod -aG dialout,i2c,gpio,netdev "$APP_USER" || true
+
+# Raspberry Pi Imager's settings (user, Wi-Fi, SSH) are applied by cloud-init on the first start.
+# After that it only slows every start-up by several seconds, so switch it off.
+if [ -d /etc/cloud ]; then
+  touch /etc/cloud/cloud-init.disabled
+fi
 if command -v raspi-config >/dev/null 2>&1; then
   raspi-config nonint do_i2c 0 || true
 fi
@@ -108,7 +114,12 @@ account        required        pam_unix.so
 session        required        pam_unix.so
 session        required        pam_systemd.so
 EOF
+  # invisible mouse pointer for cage (the kiosk unit points XCURSOR_PATH here)
+  mkdir -p /usr/share/northbolt/cursors
+  rm -rf /usr/share/northbolt/cursors/default
+  cp -r "$SRC_DIR/deploy/cursor/default" /usr/share/northbolt/cursors/
   sed -e "s#@USER@#$APP_USER#g" -e "s#@BROWSER@#$BROWSER#g" -e "s#@PORT@#$PORT#g" \
+    -e "s#@DEST@#$DEST#g" -e "s#@HOME@#$APP_HOME#g" \
     "$SRC_DIR/deploy/northbolt-kiosk.service" > /etc/systemd/system/northbolt-kiosk.service
   systemctl daemon-reload
   systemctl disable getty@tty1.service || true

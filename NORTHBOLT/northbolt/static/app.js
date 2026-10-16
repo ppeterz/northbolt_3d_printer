@@ -38,9 +38,17 @@ const splash = (() => {
   const box = $('#splash');
   const video = $('#splash-video');
   const store = (area, key, value) => { try { if (value === undefined) return area.getItem(key); area.setItem(key, value); } catch (e) { /* storage blocked */ } return null; };
-  const wanted = /[?&]intro=1/.test(location.search) || (KIOSK && !/[?&]intro=0/.test(location.search)
-    && store(sessionStorage, 'northbolt-intro') !== '1' && store(localStorage, 'northbolt-intro-off') !== '1');
-  const started = Date.now();
+  // Opened by the screen's start-up page (static/boot.html), which already played the intro: carry on
+  // from its last frame and fade straight into the UI.
+  const fromBoot = /[?&]from=boot/.test(location.search);
+  if (fromBoot) {
+    box.classList.add('continue');
+    store(sessionStorage, 'northbolt-intro', '1');
+    history.replaceState(null, '', location.pathname);
+  }
+  const wanted = !fromBoot && (/[?&]intro=1/.test(location.search) || (KIOSK && !/[?&]intro=0/.test(location.search)
+    && store(sessionStorage, 'northbolt-intro') !== '1' && store(localStorage, 'northbolt-intro-off') !== '1'));
+  const started = Date.now() - (fromBoot ? 700 : 0);
   let introDone = !wanted;
   let ready = false;
   let finished = false;
@@ -63,11 +71,11 @@ const splash = (() => {
     store(sessionStorage, 'northbolt-intro', '1');
     video.addEventListener('ended', endIntro);
     video.addEventListener('error', logoOnly);
-    video.src = '/static/intro.mp4';
+    video.src = '/static/intro.mp4#t=1.5';   // the boot splash already showed the first 1.5 s
     const p = video.play();
     if (p) p.catch(logoOnly);
     setTimeout(endIntro, 13000);   // never hold the UI back longer than this
-  } else {
+  } else if (!fromBoot) {
     box.classList.add('logo-only');
   }
   setTimeout(check, 2500);

@@ -159,8 +159,15 @@ From power-on to the UI, the printer's screen shows no start-up text:
 1. **Boot splash** (Plymouth, theme in `deploy/plymouth/northbolt`): the first frame of the intro, a point of light on
    black, breathing while the Pi starts. The installer also adds `quiet splash …` to `cmdline.txt` (keeping a copy as
    `cmdline.txt.before-northbolt`) and `disable_splash=1` to `config.txt`, which removes the rainbow square.
-2. **Intro**: once the UI loads, it plays `static/intro.mp4` from that same frame, the NORTHBOLT logo forms, and the
-   screen fades into Home. Tap to skip it. Turn it off in **Settings → System**.
+2. **Intro**: Chromium takes about 20 s to start on a Pi 3, so the kiosk starts it straight away, alongside the
+   server. Its first page is `static/boot.html`, opened from the SD card. It plays `static/intro.mp4` from just after that
+   frame while the NORTHBOLT logo forms, waits on the logo until the server answers, then opens the UI, which fades into
+   Home. Tap to skip it. Turn it off in **Settings → System**. The server writes that choice to
+   `~/northbolt-data/boot.js` for the start-up page.
+
+The kiosk keeps cage's and Chromium's messages in the journal (`journalctl -u northbolt-kiosk`), not on the screen.
+It paints Chromium's window black and uses an invisible mouse pointer (`deploy/cursor`). The installer also switches
+off cloud-init once it has applied the Imager settings, because it adds several seconds to every start.
 
 Phones and computers only see the logo for a moment while the page loads.
 

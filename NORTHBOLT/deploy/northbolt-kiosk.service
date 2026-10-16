@@ -1,6 +1,6 @@
 [Unit]
 Description=NORTHBOLT touch screen (Chromium in the cage kiosk compositor on tty1)
-After=systemd-user-sessions.service plymouth-start.service northbolt.service
+After=systemd-user-sessions.service plymouth-start.service
 Wants=dbus.socket systemd-logind.service northbolt.service
 After=dbus.socket systemd-logind.service
 # Like a display manager: this unit ends the boot splash itself (below), so the usual
@@ -13,15 +13,23 @@ ConditionPathExists=/dev/tty1
 [Service]
 Type=simple
 User=@USER@
-# Wait for the local server (the boot splash keeps breathing meanwhile).
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do curl -fs http://127.0.0.1:@PORT@/api/version >/dev/null && exit 0; sleep 1; done; exit 0'
-# Hand the screen over: the splash's last frame stays up until Chromium draws, and the UI then
-# plays the intro from that same frame.
+# Chromium takes ~20 s to start on a Pi 3, so it starts right away, alongside the server: its first
+# page (boot.html, straight from the SD card) plays the intro and opens the UI once the server answers.
+# Hand the screen over from the boot splash; its last frame stays up until Chromium draws.
 ExecStartPre=+/bin/sh -c 'command -v plymouth >/dev/null && plymouth quit --retain-splash; exit 0'
+# libseat tries seatd first and prints two harmless lines about it; go straight to logind.
+Environment=LIBSEAT_BACKEND=logind
+# An invisible pointer: the screen is touch only.
+Environment=XCURSOR_PATH=/usr/share/northbolt/cursors XCURSOR_THEME=default
 ExecStart=/usr/bin/cage -s -- @BROWSER@ --kiosk --noerrdialogs --disable-infobars --incognito \
-  --no-first-run --disable-pinch --overscroll-history-navigation=0 --disable-features=Translate \
-  --autoplay-policy=no-user-gesture-required \
-  --check-for-update-interval=31536000 --password-store=basic http://127.0.0.1:@PORT@/
+  --no-first-run --disable-pinch --overscroll-history-navigation=0 --disable-features=Translate,MediaRouter \
+  --autoplay-policy=no-user-gesture-required --default-background-color=000000ff --force-dark-mode \
+  --disable-component-update --disable-background-networking --disable-sync --no-default-browser-check \
+  --check-for-update-interval=31536000 --password-store=basic \
+  "file://@DEST@/northbolt/static/boot.html?port=@PORT@&data=@HOME@/northbolt-data"
+# keep cage and Chromium messages in the journal, not on the screen
+StandardOutput=journal
+StandardError=journal
 Restart=always
 RestartSec=3
 UtmpIdentifier=tty1

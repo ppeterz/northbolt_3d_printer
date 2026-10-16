@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NORTHBOLT</title>
+<!--
+  First page of the printer's screen, opened straight from the SD card (file://) by northbolt-kiosk.service,
+  so Chromium can start while the NORTHBOLT server is still starting. It plays the intro from the frame the
+  boot splash showed, keeps checking for the server, and opens the UI once both are done.
+  Query: port=<server port>, data=<data folder> (its boot.js, written by the server, says whether to play the intro).
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  video, img { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  img { opacity: 0; }
+  img.on { opacity: 1; }
+  #wait {
+    position: fixed; left: 0; right: 0; bottom: 14%; text-align: center; color: rgba(255, 255, 255, .55);
+    font: 14px/1 system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; opacity: 0; transition: opacity .6s;
+  }
+  #wait.on { opacity: 1; }
+</style>
+</head>
+<body>
+<video id="intro" muted playsinline preload="auto"></video>
+<img id="last" src="splash-last.jpg" alt="">
+<div id="wait">Starting…</div>
+<script>
+'use strict';
+const q = new URLSearchParams(location.search);
+const port = q.get('port') || '8080';
+const data = q.get('data') || '';
+const video = document.getElementById('intro');
+const last = document.getElementById('last');
+const wait = document.getElementById('wait');
+const started = Date.now();
+let introDone = false;
+let serverUp = false;
+let leaving = false;
+
+function check() {
+  if (leaving) return;
+  if (introDone && serverUp) {
+    leaving = true;
+    location.replace(`http://127.0.0.1:${port}/?from=boot`);   // the UI continues from the same last frame
+  } else if (introDone && Date.now() - started > 4000) {
+    wait.classList.add('on');
+  }
+}
+function showLast() {
+  last.classList.add('on');
+  try { video.pause(); } catch (e) { /* ignore */ }
+  if (!introDone) { introDone = true; check(); }
+}
+
+// Is the server answering yet? An image works across file:// and http:// without any CORS headers.
+function poll() {
+  if (serverUp) return;
+  const img = new Image();
+  img.onload = () => { serverUp = true; check(); };
+  img.onerror = () => setTimeout(poll, 500);
+  img.src = `http://127.0.0.1:${port}/static/logo-mark.svg?t=${Date.now()}`;
+}
+poll();
+setInterval(check, 1000);
+document.addEventListener('pointerdown', showLast);   // tap to skip
+
+function start() {
+  const cfg = window.NB_BOOT || {};
+  if (cfg.intro === false) { showLast(); return; }
+  video.addEventListener('ended', showLast);
+  video.addEventListener('error', showLast);
+  video.src = 'intro.mp4#t=1.5';     // the boot splash already showed the first 1.5 s: the point of light
+  const p = video.play();
+  if (p) p.catch(showLast);
+  setTimeout(showLast, 12000);      // never wait on a stuck video
+}
+// The server writes <data>/boot.js with the intro setting; without it the intro plays.
+if (data) {
+  const s = document.createElement('script');
+  s.src = `file://${data}/boot.js`;
+  s.onload = s.onerror = start;
+  document.head.appendChild(s);
+} else {
+  start();
+}
+</script>
+</body>
+</html>
