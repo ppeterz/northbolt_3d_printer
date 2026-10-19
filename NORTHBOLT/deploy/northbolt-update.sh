@@ -40,7 +40,7 @@ echo "== $(date) updating from $REPO_URL ($BRANCH)"
 if [ -d "$SRC/.git" ]; then
   git -C "$SRC" remote set-url origin "$REPO_URL"
   git -C "$SRC" fetch --depth 1 --filter=blob:none origin "$BRANCH" \
-    || fail "Couldn't download from GitHub. Is the printer online?"
+    || fail "Couldn't download the update. Is the printer online?"
   git -C "$SRC" reset --hard FETCH_HEAD || fail "Couldn't unpack the download"
 else
   rm -rf "$SRC"
@@ -50,7 +50,7 @@ else
   else
     rm -rf "$SRC"
     git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$SRC" \
-      || fail "Couldn't download from GitHub. Is the printer online?"
+      || fail "Couldn't download the update. Is the printer online?"
   fi
 fi
 NEW="$(git -C "$SRC" log -1 --format='%h %s')"

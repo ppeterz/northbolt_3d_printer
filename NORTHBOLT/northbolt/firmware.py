@@ -20,6 +20,8 @@ import time
 
 import aiohttp
 
+from .config import github_repo
+
 log = logging.getLogger("firmware")
 
 APP_LIMIT = 0x3E000          # ATmega2560 with the 8 KB Arduino bootloader: application ends here
@@ -122,7 +124,7 @@ class FirmwareUpdater:
         return {
             "state": self.state, "phase": self.phase, "progress": self.progress, "message": self.message,
             "release": self.release, "result": self.result, "error": self.error, "backup": self.backup(),
-            "repo": cfg["github_repo"], "available": self.available, "prompt": self.prompt(),
+            "available": self.available, "prompt": self.prompt(),
             "last_check": self.last_check, "auto_check": cfg.get("auto_check", True),
             "skipped_tag": cfg.get("skipped_tag"),
         }
@@ -148,24 +150,20 @@ class FirmwareUpdater:
     async def _fetch_release(self):
         """The latest release and its printer .hex asset. Raises FirmwareError; doesn't touch the UI state."""
         cfg = self.svc.settings["firmware"]
-        if not cfg["github_repo"]:
-            raise FirmwareError("Set your GitHub repository first")
-        repo = parse_repo(cfg["github_repo"])
+        repo = parse_repo(github_repo(self.svc.settings))
         url = f"{cfg['github_api'].rstrip('/')}/repos/{repo}/releases/latest"
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
                 async with s.get(url, headers=self._headers()) as r:
                     if r.status == 404:
-                        raise FirmwareError(f"No releases found in {repo}. Push a tag like fw-1.1.9.9-NB1, "
-                                            "or make a release with the .hex attached.")
+                        raise FirmwareError("No firmware release has been published yet")
                     if r.status in (401, 403):
-                        raise FirmwareError("GitHub refused the request (private repository needs a token, "
-                                            "or the hourly limit was reached)")
+                        raise FirmwareError("The update server refused the request. Try again in an hour.")
                     if r.status != 200:
-                        raise FirmwareError(f"GitHub answered {r.status}")
+                        raise FirmwareError(f"The update server answered {r.status}")
                     rel = await r.json(content_type=None)
         except aiohttp.ClientError as exc:
-            raise FirmwareError(f"Can't reach GitHub: {exc}. Is the printer online?")
+            raise FirmwareError("Can't reach the update server. Is the printer online?")
         hexes = [a for a in rel.get("assets", []) if a.get("name", "").lower().endswith(".hex")]
         match = (cfg.get("asset_match") or "printer").lower()
         picked = [a for a in hexes if match in a["name"].lower()] or (hexes if len(hexes) == 1 else [])
@@ -215,9 +213,7 @@ class FirmwareUpdater:
             raise FirmwareError("Busy")
         self.error = None
         try:
-            repo = parse_repo(self.svc.settings["firmware"]["github_repo"]) \
-                if self.svc.settings["firmware"]["github_repo"] else ""
-            self._set("checking", message=f"Checking {repo}")
+            self._set("checking", message="Checking for new firmware")
             rel = await self._fetch_release()
             await self._compare(rel)         # downloads and checks the .hex, so a bad file is caught here
             self.release = rel
@@ -249,7 +245,7 @@ class FirmwareUpdater:
         while True:
             cfg = self.svc.settings["firmware"]
             try:
-                if cfg.get("auto_check", True) and cfg["github_repo"]:
+                if cfg.get("auto_check", True):
                     # wait until the board has reported its firmware, so there is something to compare
                     for _ in range(120):
                         if self.svc.link.ready and self.svc.firmware:
@@ -302,7 +298,7 @@ class FirmwareUpdater:
         digest = rel.get("digest") or ""
         if digest.startswith("sha256:"):
             if hashlib.sha256(data).hexdigest() != digest.split(":", 1)[1].lower():
-                raise FirmwareError("The download doesn't match GitHub's checksum. Try again.")
+                raise FirmwareError("The download is damaged (checksum mismatch). Try again.")
         return data
 
     # ------------------------------------------------------------------ flashing

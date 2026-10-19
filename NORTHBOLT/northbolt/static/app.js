@@ -989,14 +989,7 @@ function firmwareCard() {
     <div class="card stack">
       <h3>Printer board firmware</h3>
       <div class="row between"><span class="muted">Running now</span><b class="num" id="fw-now" style="text-align:right">–</b></div>
-      <div class="field"><div class="lab">Your GitHub repository<small>Releases there with a printer .hex file can be installed from here</small></div></div>
-      <div class="row wrap">
-        <input type="text" id="fw-repo" data-label="GitHub repository link" placeholder="https://github.com/you/SkriwareFirmware" style="flex:1" value="${esc(fw.github_repo || '')}">
-        <button class="btn small" id="fw-save">Save</button>
-      </div>
-      <div class="row wrap">
-        <input type="password" id="fw-token" data-label="GitHub token (private repositories only)" placeholder="Token, only for a private repository" style="flex:1" value="${esc(fw.token || '')}">
-      </div>
+      <div class="muted" style="font-size:calc(13px * var(--ts))">New NORTHBOLT firmware is published online. The printer checks for it and installs it from here.</div>
     </div>
     <div class="card" id="fw-auto"></div>
     <div class="split-edges">
@@ -1009,19 +1002,8 @@ function firmwareCard() {
   const auto = $('#fw-auto', card);
   auto.appendChild(el('<div class="muted num" id="fw-avail" style="font-size:calc(14px * var(--ts));padding-bottom:4px"></div>'));
   auto.appendChild(fieldNode(tog('firmware.auto_check', 'Check for updates by itself',
-    'Looks at your repository every few hours and asks before installing anything')));
-  $('#fw-save', card).onclick = e => act(e.currentTarget, async () => {
-    const changes = { github_repo: $('#fw-repo', card).value.trim() };
-    const token = $('#fw-token', card).value;
-    if (token !== (settings.firmware.token || '')) changes.token = token;
-    settings = await post('/api/settings', { firmware: changes });
-    toast('Saved');
-  });
-  $('#fw-check', card).onclick = e => act(e.currentTarget, async () => {
-    if ($('#fw-repo', card).value.trim() !== (settings.firmware.github_repo || '')) $('#fw-save', card).click();
-    await new Promise(r => setTimeout(r, 300));
-    await post('/api/firmware/check');
-  });
+    'Looks online every few hours and asks before installing anything')));
+  $('#fw-check', card).onclick = e => act(e.currentTarget, () => post('/api/firmware/check'));
   $('#fw-restore', card).onclick = async () => {
     const b = S.firmware_update && S.firmware_update.backup;
     if (!b) return;
@@ -1071,9 +1053,9 @@ function renderFirmware() {
     if (rel && (fu.state === 'ready' || fu.state === 'done' || fu.state === 'error' || fu.available)) {
       const when = rel.published ? new Date(rel.published).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       relBox.innerHTML = `<div class="card stack">
-        <div class="row between"><h3 style="margin:0">Latest release</h3><span class="muted">${esc(rel.repo)}</span></div>
+        <div class="row between"><h3 style="margin:0">Latest release</h3></div>
         <div class="row between"><b>${esc(rel.name)}</b><span class="muted num">${esc(when)}</span></div>
-        <div class="muted num" style="font-size:calc(13px * var(--ts))">${esc(rel.asset)}${rel.size ? ` · ${fmtSize(rel.size)}` : ''}${rel.digest ? ' · checksum from GitHub' : ''}</div>
+        <div class="muted num" style="font-size:calc(13px * var(--ts))">${esc(rel.asset)}${rel.size ? ` · ${fmtSize(rel.size)}` : ''}${rel.digest ? ' · checksum checked' : ''}</div>
         ${rel.notes ? `<div class="muted" style="font-size:calc(13px * var(--ts));white-space:pre-wrap;max-height:110px;overflow:auto">${esc(rel.notes)}</div>` : ''}
         <div class="split-edges"><span class="muted" style="font-size:calc(13px * var(--ts))">A backup of the current firmware is saved first.</span>
           <div class="row"><button class="btn warn" id="fw-install">Install on the printer</button></div></div>
@@ -1147,7 +1129,7 @@ function renderSoftwareCard() {
   } else if (u && u.state === 'done' && recentUpdate(u)) {
     status = `<div class="row"><svg style="width:18px;height:18px;color:var(--ok)"><use href="#i-check"/></svg><span>${esc(u.message)}</span></div>`;
   } else if (sw.checking) {
-    status = '<div class="row"><div class="spinner"></div><span>Checking GitHub…</span></div>';
+    status = '<div class="row"><div class="spinner"></div><span>Checking for updates…</span></div>';
   } else if (sw.error) {
     status = `<div class="muted" style="color:var(--warn)">${esc(sw.error)}</div>`;
   } else if (sw.last_check) {
@@ -1158,7 +1140,7 @@ function renderSoftwareCard() {
   const showLog = u && u.log && u.log.length && (sw.running || (u.state === 'failed' && recentUpdate(u)));
   box.innerHTML = `
     <div class="row between"><h3 style="margin:0">NORTHBOLT software</h3>
-      <span class="muted num">${b ? `${esc(shortSha(b.sha))} · ${esc(fmtDate(b.time))}` : 'Not installed from GitHub'}</span></div>
+      <span class="muted num">${b ? `${esc(shortSha(b.sha))} · ${esc(fmtDate(b.time))}` : 'Version unknown'}</span></div>
     ${status}
     ${showLog ? `<div class="log" style="height:110px">${u.log.map(l => `<div>${esc(l)}</div>`).join('')}</div>` : ''}
     <div class="split-edges">
@@ -1180,7 +1162,7 @@ function renderSoftwarePrompt() {
   const changes = (a.changes.length ? a.changes : [a.subject]).slice(0, 4);
   swPromptModal = modal({
     title: 'NORTHBOLT update available', sticky: true,
-    body: `<p>Version <b>${esc(a.short)}</b> is in your GitHub repository${a.ahead_by ? ` (${a.ahead_by} change${a.ahead_by === 1 ? '' : 's'})` : ''}:</p>
+    body: `<p>Version <b>${esc(a.short)}</b> is available${a.ahead_by ? ` (${a.ahead_by} change${a.ahead_by === 1 ? '' : 's'})` : ''}:</p>
       <ul class="checklist" style="margin:0">${changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
       <p class="muted" style="font-size:calc(13px * var(--ts))">Takes a minute or two. Settings and files are kept, and the screen restarts by itself.</p>`,
     actions: [
@@ -1232,7 +1214,7 @@ function renderFirmwarePrompt() {
   const quiet = () => { fwPromptQuietUntil = Date.now() + 5000; };
   fwPromptModal = modal({
     title: 'Firmware update available', sticky: true,
-    body: `<p><b>${esc(a.name)}</b> is ready in your GitHub repository.</p>
+    body: `<p><b>${esc(a.name)}</b> is available.</p>
       <div class="row between"><span class="muted">The printer runs</span><span class="num" style="text-align:right">${esc(a.current)}</span></div>
       <div class="row between"><span class="muted">New version</span><span class="num" style="text-align:right">${esc(a.firmware)}</span></div>
       <p class="muted" style="font-size:calc(13px * var(--ts))">Installing takes about 2 minutes. The heaters turn off and the current firmware is saved first, so you can go back. Don't turn the printer off while it runs.</p>`,
@@ -2162,7 +2144,7 @@ function systemCard() {
   $('#sys-key-field', card).appendChild(fieldNode(tog('require_key_remote', 'Require the API key on other devices', 'This screen never needs it')));
   $('#sys-key-field', card).appendChild(fieldNode(tog('boot_intro', 'Play the intro when the printer starts', 'On the printer\'s own screen, after the boot splash. Tap it to skip.')));
   $('#sys-software-auto', card).appendChild(fieldNode(tog('software.auto_check', 'Check for updates by itself',
-    'Looks at your GitHub repository every few hours and offers new versions on this screen')));
+    'Looks online every few hours and offers new versions on this screen')));
   const tz = settings.touch_dead_zone;
   $('#sys-touch-state', card).textContent = tz
     ? `A strip from ${tz.top} to ${tz.bottom} px down doesn't respond. The printer's screen keeps its buttons out of it.`

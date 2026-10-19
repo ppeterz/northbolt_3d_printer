@@ -18,6 +18,7 @@ import time
 
 import aiohttp
 
+from .config import github_repo
 from .firmware import FirmwareError, parse_repo
 
 log = logging.getLogger("software")
@@ -104,7 +105,7 @@ class SoftwareUpdater:
             "build": self.build, "available": self.available, "checking": self.checking,
             "last_check": self.last_check, "error": self.error, "update": self.status(),
             "running": self.running, "prompt": self.prompt(), "skipped": self.cfg.get("skipped"),
-            "auto_check": self.cfg.get("auto_check", True), "repo": self.svc.settings["firmware"]["github_repo"],
+            "auto_check": self.cfg.get("auto_check", True),
         }
 
     # ------------------------------------------------------------------ GitHub
@@ -118,21 +119,18 @@ class SoftwareUpdater:
     async def _get(self, session, url):
         async with session.get(url, headers=self._headers()) as r:
             if r.status in (401, 403):
-                raise SoftwareError("GitHub refused the request (private repository needs a token, "
-                                    "or the hourly limit was reached)")
+                raise SoftwareError("The update server refused the request. Try again in an hour.")
             if r.status == 404:
                 return None
             if r.status != 200:
-                raise SoftwareError(f"GitHub answered {r.status}")
+                raise SoftwareError(f"The update server answered {r.status}")
             return await r.json(content_type=None)
 
     async def _fetch(self):
         """Newest commit touching the NORTHBOLT folder, and how far ahead of the installed one it is."""
         fw = self.svc.settings["firmware"]
-        if not fw["github_repo"]:
-            raise SoftwareError("Set your GitHub repository first (Settings → Firmware)")
         try:
-            repo = parse_repo(fw["github_repo"])
+            repo = parse_repo(github_repo(self.svc.settings))
         except FirmwareError as exc:
             raise SoftwareError(str(exc))
         api = f"{fw['github_api'].rstrip('/')}/repos/{repo}"
@@ -141,7 +139,7 @@ class SoftwareUpdater:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
                 commits = await self._get(s, f"{api}/commits?sha={cfg['branch']}&path={cfg['path']}&per_page=1")
                 if not commits:
-                    raise SoftwareError(f"No NORTHBOLT code found on the {cfg['branch']} branch of {repo}")
+                    raise SoftwareError("No NORTHBOLT version found to update from")
                 top = commits[0]
                 latest = {
                     "sha": top["sha"], "short": top["sha"][:7],
@@ -153,7 +151,7 @@ class SoftwareUpdater:
                     return latest, False
                 cmp = await self._get(s, f"{api}/compare/{self.build['sha']}...{latest['sha']}")
         except aiohttp.ClientError as exc:
-            raise SoftwareError(f"Can't reach GitHub: {exc}. Is the printer online?")
+            raise SoftwareError("Can't reach the update server. Is the printer online?")
         if cmp is None:          # the installed commit isn't on GitHub (a local change): offer the GitHub one
             return latest, True
         if cmp.get("status") in ("behind", "identical"):
@@ -186,8 +184,7 @@ class SoftwareUpdater:
         await asyncio.sleep(self.cfg.get("first_check_s", 90))
         while True:
             try:
-                if self.cfg.get("auto_check", True) and self.svc.settings["firmware"]["github_repo"] \
-                        and self.build and not self.running:
+                if self.cfg.get("auto_check", True) and self.build and not self.running:
                     try:
                         await self.check()
                         log.info("Software check: %s", f"{self.available['short']} available"

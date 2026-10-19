@@ -389,6 +389,24 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(merged["pause"]["retract"], DEFAULTS["pause"]["retract"])
 
 
+class RepoTests(unittest.TestCase):
+    """Updates know where to come from without anyone typing a GitHub link."""
+
+    def test_setting_then_install_record_then_default(self):
+        from northbolt.config import DEFAULT_REPO, github_repo
+        with tempfile.TemporaryDirectory() as d:
+            conf = os.path.join(d, "install.conf")
+            settings = deep_merge(DEFAULTS, {})
+            self.assertEqual(github_repo(settings, conf), DEFAULT_REPO)               # nothing anywhere
+            with open(conf, "w") as fh:
+                fh.write("APP_USER='northbolt'\nKIOSK=1\nREPO_URL='https://github.com/someone/fork.git'\n")
+            self.assertEqual(github_repo(settings, conf), "https://github.com/someone/fork.git")
+            settings["firmware"]["github_repo"] = "https://github.com/me/mine"
+            self.assertEqual(github_repo(settings, conf), "https://github.com/me/mine")
+            settings["firmware"]["github_repo"] = "   "                               # an old empty value
+            self.assertEqual(github_repo(settings, conf), "https://github.com/someone/fork.git")
+
+
 class LedTests(unittest.TestCase):
     """The LED policy sends the colour and effect set for each printer state, only when it changes."""
 

@@ -167,6 +167,28 @@ DEFAULTS = {
 }
 
 
+DEFAULT_REPO = "https://github.com/ppeterz/northbolt_3d_printer"
+INSTALL_CONF = "/etc/northbolt/install.conf"
+
+
+def github_repo(settings, install_conf=INSTALL_CONF):
+    """The GitHub repository that firmware and NORTHBOLT updates come from: a repository set in the
+    settings, else the one NORTHBOLT was installed from (the installer records it), else NORTHBOLT's own.
+    Nobody has to type it in."""
+    repo = str((settings["firmware"] or {}).get("github_repo") or "").strip()
+    if repo:
+        return repo
+    try:
+        with open(install_conf, encoding="utf-8") as fh:
+            for line in fh:
+                key, _, value = line.strip().partition("=")
+                if key == "REPO_URL" and value.strip("'\""):
+                    return value.strip("'\"")
+    except OSError:
+        pass
+    return DEFAULT_REPO
+
+
 def deep_merge(base, override):
     out = copy.deepcopy(base)
     for key, value in (override or {}).items():
