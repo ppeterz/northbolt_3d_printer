@@ -1277,6 +1277,13 @@ function showPage(name) {
 // ------------------------------------------------------------------ rendering
 function statusOf() {
   if (!S || S._stale) return ['Host offline', 'bad'];
+  const fu = S.firmware_update;
+  if (fu && fu.state === 'working') {
+    // the board is disconnected on purpose while avrdude has the port: not "offline"
+    const step = { download: 'Downloading firmware', prepare: 'Updating firmware', backup: 'Backing up firmware',
+      write: 'Writing firmware', verify: 'Checking firmware', reconnect: 'Reconnecting' }[fu.phase] || 'Updating firmware';
+    return [fu.progress != null && fu.phase !== 'reconnect' ? `${step} ${fu.progress}%` : step, 'warn'];
+  }
   const c = S.connection;
   if (c.halted) return ['Halted', 'bad'];
   if (!c.ready) return [c.connected ? 'Connecting' : 'Printer offline', 'bad'];
