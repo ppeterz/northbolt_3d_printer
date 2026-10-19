@@ -250,3 +250,12 @@ class Rig:
 
     def sim_history(self, n=5000):
         return self.admin(f"history {n}")["history"]
+
+    def wait_sim(self, pred, timeout=60, what="simulator condition"):
+        end = time.time() + timeout
+        while time.time() < end:
+            last = self.admin("state")
+            if pred(last):
+                return last
+            time.sleep(0.02)
+        raise AssertionError(f"Timed out waiting for {what}. Host job: {self.state().get('job')}\n{self.tail()}")

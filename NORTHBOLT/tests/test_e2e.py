@@ -158,18 +158,28 @@ class PauseTests(E2EBase):
 class PowerLossTests(E2EBase):
     settings = {"recovery": {"min_interval_s": 0, "progress_interval_s": 0.5}}
 
-    def _power_loss_cycle(self, tool):
-        cmds = self.make(layers=25, segs=60, tool=tool)
+    @staticmethod
+    def _layer(cmds, layer):
+        """make_gcode's commands for one layer: from its Z move down to the layer to its Z-hop at the end."""
+        start = cmds.index(f"G1 Z{round(0.2 * layer, 3)} F600")
+        end = next(i for i in range(start + 1, len(cmds)) if cmds[i].startswith("G1 Z"))
+        return cmds[start:end + 1]
+
+    def _power_loss_cycle(self, cmds, tool, when, line, rises=0.0):
+        """Print, lose power just `when` ("before"/"after") the printer runs `line`, resume and check.
+
+        rises: how much higher the nozzle may come back than it was. Power lost around a Z move can't be
+        told apart from power lost just before or just after it, so the host assumes the lower height:
+        the nozzle may then print up to one Z move higher for a moment, but never lower, into the part."""
+        self.rig.admin(f"cut {when} {line}")
         self.start_print()
-        self.wait_layer(6)
-        before = self.rig.admin("state")
-        offset_before = before["nozzle"] - before["logical_z"]
-        time.sleep(1.0)
-        # Both lose power: the printer board resets and the Pi dies mid-write.
-        self.rig.admin("powerloss")
+        # Both lose power: the printer board dies around `line`, then the Pi dies mid-write.
+        self.rig.wait_sim(lambda s: not s["power"], 120, f"power cut {when} {line}")
         self.rig.kill_host()
         lost_at = self.rig.admin("state")
+        offset_before = lost_at["nozzle"] - lost_at["logical_z"]
         old_hist = collections.Counter(self.rig.sim_history())
+        self.rig.admin("poweron")
         self.rig.start_host()
         st = self.rig.wait(lambda s: s["recovery"] is not None, 20, "recovery offer")
         self.assertEqual(st["recovery"]["file"], "part.gcode")
@@ -179,10 +189,9 @@ class PowerLossTests(E2EBase):
         time.sleep(0.5)
         after = self.rig.admin("state")
         self.assertEqual(after["tool"], tool)
-        offset_after = after["nozzle"] - after["logical_z"]
-        # The nozzle-to-G-code-Z relationship must be the same as before the outage.
-        self.assertAlmostEqual(offset_after, offset_before, places=3,
-                               msg=f"Z drifted by {offset_after - offset_before:.3f} mm")
+        # The nozzle-to-G-code-Z relationship must be the same as before the outage (or `rises` higher).
+        drift = (after["nozzle"] - after["logical_z"]) - offset_before
+        self.assertAlmostEqual(drift, rises, places=3, msg=f"Z drifted by {drift:.3f} mm, expected {rises:.3f} mm")
         st = self.wait_done()
         self.assertEqual(st["job"]["state"], "finished", st["job"])
         hist = self.rig.sim_history()
@@ -202,11 +211,30 @@ class PowerLossTests(E2EBase):
         self.assertIsNone(st["recovery"])
         return first_resumed, lost_at
 
+    def _mid_layer(self, tool):
+        cmds = self.make(layers=25, segs=60, tool=tool)
+        layer = self._layer(cmds, 7)
+        self._power_loss_cycle(cmds, tool, "after", layer[len(layer) // 2])
+
     def test_power_loss_resume_left_nozzle(self):
-        self._power_loss_cycle(0)
+        self._mid_layer(0)
 
     def test_power_loss_resume_right_nozzle(self):
-        self._power_loss_cycle(1)
+        self._mid_layer(1)
+
+    # Around Z moves. The host syncs (M400) and saves the head height before each one, so these are the
+    # moments a save can't describe exactly: the printer may or may not have run the move yet.
+    def test_power_lost_just_before_a_z_hop(self):
+        cmds = self.make(layers=8, segs=20)
+        self._power_loss_cycle(cmds, 0, "before", self._layer(cmds, 4)[-1])
+
+    def test_power_lost_as_a_z_hop_runs(self):
+        cmds = self.make(layers=8, segs=20)
+        self._power_loss_cycle(cmds, 0, "after", self._layer(cmds, 4)[-1], rises=0.4)
+
+    def test_power_lost_just_before_a_layer_change_down(self):
+        cmds = self.make(layers=8, segs=20)
+        self._power_loss_cycle(cmds, 0, "before", self._layer(cmds, 5)[0], rises=0.2)
 
 
 class ZOffsetTests(E2EBase):

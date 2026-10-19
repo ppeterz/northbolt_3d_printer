@@ -275,6 +275,7 @@ class JobRunner:
 
                 before = self.tracker.state.copy()
                 res = self.tracker.feed(cmd)
+                confirm = None
                 if res.layer_change and rec["enabled"]:
                     now = time.monotonic()
                     if now - self._last_checkpoint >= rec["min_interval_s"]:
@@ -287,15 +288,28 @@ class JobRunner:
                 elif rec["enabled"] and rec.get("sync_z_moves", True):
                     after = self.tracker.state
                     z_moves = before.z is not None and after.z is not None and abs(after.z - before.z) > 1e-6
-                    if z_moves or (after.tool != before.tool and after.z is not None):
+                    tool_change = after.tool != before.tool and after.z is not None
+                    if z_moves or tool_change:
                         self._streaming = True
                         await self._cmd("M400")
-                        self.svc.recovery.head(after.z, after.tool, self.line_index, offset, self.elapsed())
+                        # Power can go just before this line runs or just after, and no save can tell which:
+                        # until the line is confirmed, record the lower height. Resuming too high prints in
+                        # the air for a moment; resuming too low would drive the nozzle into the part.
+                        if z_moves and not tool_change and after.z < before.z:
+                            self.svc.recovery.head(after.z, after.tool, self.line_index, offset, self.elapsed())
+                        else:
+                            self.svc.recovery.head(before.z, before.tool, self.line_index, offset, self.elapsed())
+                            confirm = (after.z, after.tool)
                         self._last_progress_save = time.monotonic()
 
                 self._streaming = True
                 await self._cmd(cmd)
                 self.bytes_done = fh.tell()
+                if confirm:
+                    # The move up or tool change has run: the head is at its new height.
+                    await self._cmd("M400")
+                    self.svc.recovery.head(*confirm, self.line_index, offset, self.elapsed())
+                    self._last_progress_save = time.monotonic()
 
                 if rec["enabled"]:
                     now = time.monotonic()

@@ -61,11 +61,13 @@ class RecoveryStore:
         self._save()
 
     def head(self, z, tool, line_index, offset, elapsed):
-        """Saved after M400, just before sending a line that moves Z or changes tool.
+        """Saved after M400 around a line that moves Z or changes tool: everything before it has been printed.
 
-        Everything before that line has been printed, and once it runs the head is at z.
-        Acknowledged-line progress alone can't tell the head height: the printer may already
-        be a layer or a Z-hop further on than the resume point."""
+        Before the line is sent, z/tool are the lower of the heights before and after it (power may go
+        either side of it, and resuming too high is harmless where too low hits the part). A move up or a
+        tool change is saved again after a second M400 confirms it ran. Re-sending that line on resume
+        is harmless. Acknowledged-line progress alone can't tell the head height: the printer may
+        already be a layer or a Z-hop further on than the resume point."""
         if not self.data or not self.data.get("checkpoint"):
             return
         self.data["sync"] = {"line": line_index, "offset": offset, "elapsed": elapsed}

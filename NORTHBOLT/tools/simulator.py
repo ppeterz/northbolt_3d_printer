@@ -13,7 +13,9 @@ It reproduces the parts the host depends on:
 
 Run:   python tools/simulator.py --port 5555 --admin 5556 --speed 20
 Host:  python -m northbolt --serial socket://127.0.0.1:5555
-Admin: send one line, e.g. "runout 0", "state", "powerloss", "history 50"
+Admin: send one line, e.g. "runout 0", "state", "powerloss", "poweron", "history 50",
+       "cut before G1 Z1.6 F600" / "cut after <command>": lose power just before or just after the
+       printer runs that exact command (before its "ok"), to hit a precise moment of a print.
 """
 
 import argparse
@@ -490,13 +492,31 @@ class Simulator:
         self.head = None
         self.tasks = []
         self.client = None
+        self.off = False      # power cut: the board is dead and the port refuses connections
+        self.cut_at = None    # ("before" | "after", command): cut the power around that command
 
     def new_firmware(self):
         fw = Firmware(self.args.speed, self.args.error_rate, self.eeprom, self.head)
         self.eeprom = fw.eeprom
         return fw
 
+    def cut_power(self):
+        """The printer loses power: connection drops, RAM is gone, the head stays where it is.
+        It stays off until "poweron", so nothing can reconnect to the dead board meanwhile."""
+        self.off = True
+        self.cut_at = None
+        if self.client:
+            self.client.close()
+        for t in self.tasks:
+            t.cancel()
+        if self.fw:
+            self.head = self.fw.head
+            self.fw.dead = True
+
     async def handle_client(self, reader, writer):
+        if self.off:
+            writer.close()
+            return
         if self.client:
             self.client.close()
         for t in self.tasks:
@@ -531,6 +551,9 @@ class Simulator:
             cmd = await fw.queue.get()
             if fw.dead:
                 continue
+            if self.cut_at == ("before", cmd):
+                self.cut_power()
+                continue
             fw.history.append(cmd)
             fw.history = fw.history[-5000:]
             try:
@@ -539,6 +562,9 @@ class Simulator:
                 continue
             except Exception as exc:
                 fw.out(f"echo:simulator error {exc!r}")
+            if self.cut_at == ("after", cmd):
+                self.cut_power()
+                continue
             if not fw.dead:
                 fw.out("ok")
 
@@ -558,19 +584,16 @@ class Simulator:
                      "ho": fw.ho, "ws": fw.ws, "e0": fw.e0, "e1": fw.e1, "eeprom": fw.eeprom,
                      "temps": fw.temps, "soft": fw.soft, "leveling": fw.leveling, "moves": fw.moves,
                      "extruded": round(fw.extruded, 3), "dead": fw.dead, "last_n": fw.last_n,
-                     "sensors": fw.sensors, "runout": fw.runout}
+                     "sensors": fw.sensors, "runout": fw.runout, "power": not self.off}
         elif parts[0] == "history" and fw:
             n = int(parts[1]) if len(parts) > 1 else 50
             reply = {"history": fw.history[-n:]}
         elif parts[0] == "powerloss":
-            # The printer loses power: connection drops, RAM is gone, the head stays where it is.
-            if self.client:
-                self.client.close()
-            for t in self.tasks:
-                t.cancel()
-            if fw:
-                self.head = fw.head
-                fw.dead = True
+            self.cut_power()
+        elif parts[0] == "poweron":
+            self.off = False
+        elif parts[0] == "cut" and len(parts) > 2 and parts[1] in ("before", "after"):
+            self.cut_at = (parts[1], line.split(None, 2)[2])
         elif parts[0] == "bed" and fw and len(parts) == 4:
             # "bed <front> <back_left> <back_right>": screw heights, e.g. after "turning" them
             hs = [float(v) for v in parts[1:]]

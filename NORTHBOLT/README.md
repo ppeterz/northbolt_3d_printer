@@ -252,9 +252,11 @@ to be the nozzle touching the bed rather than resting on the paper. The default 
 With no voltage sensing, the Pi records progress as it prints:
 
 1. **At each layer change**, it waits for the printer to finish (`M400`) and saves a checkpoint with the full state.
-2. **Before every Z move or tool change**, it waits for the printer to finish and saves where the head is about to be.
-   After a power cut, the head height is therefore known exactly. Without this, the head could already be a layer
-   or a Z-hop further up than the resume point. Each Z-hop gets a stop of about 20 ms.
+2. **Around every Z move or tool change**, it waits for the printer to finish and saves the head height. Before a
+   move down it saves the new, lower height. Before a move up or a tool change it saves the current height, then
+   saves again once a second wait confirms the move ran. So the saved height is never above the real one.
+   Without this, the head could already be a layer or a Z-hop further up than the resume point. Each Z-hop
+   gets a stop of about 20 ms.
 3. **Every 2 seconds**, it saves the last line the firmware acknowledged. Up to 26 moves may still be queued at that point.
 
 All saves are atomic (write, flush, rename), so a power cut never leaves a half-written file.
@@ -270,7 +272,8 @@ The resume point is the last safe line, at most 26 moves before the last acknowl
 and a few millimetres printed twice.
 
 **Limits:**
-- A power cut during the brief Z move itself leaves the height uncertain by that move. Z-hops are 0.2 to 0.6 mm.
+- A power cut during the brief Z move itself leaves the height uncertain by that move (Z-hops are 0.2 to 0.6 mm).
+  The resume then assumes the lower height, so the first moves may print up to that much too high, never too low.
 - Long outages let ABS and PETG cool and lift off the bed.
 - Resuming inside the first few millimetres skips Skriware's E-fade setup (`M58`/`M60`), so those layers may extrude slightly differently.
 - If the right nozzle was printing, check the extruder lift is raised before resuming. The firmware forgets the lift state on reboot.
