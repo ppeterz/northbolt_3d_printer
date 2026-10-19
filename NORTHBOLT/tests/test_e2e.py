@@ -335,6 +335,11 @@ class ApiTests(E2EBase):
             r = self.rig.post("/api/settings", {"text_size": bad}, expect_ok=False)
             self.assertEqual(r["status"], 400, bad)
         self.assertEqual(self.rig.get("/api/settings")["text_size"], 90)
+        self.assertEqual(self.rig.state()["config"]["ui_size"], 80)
+        self.rig.post("/api/settings", {"ui_size": 70})
+        self.rig.wait(lambda s: s["config"]["ui_size"] == 70, 5, "pushed to the screen")
+        r = self.rig.post("/api/settings", {"ui_size": 20}, expect_ok=False)
+        self.assertEqual(r["status"], 400)
 
     def test_boot_intro_setting(self):
         self.assertTrue(self.rig.state()["config"]["boot_intro"])

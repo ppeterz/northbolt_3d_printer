@@ -399,8 +399,16 @@
           <button class="btn" data-act="z-cancel">Cancel</button>
         </div>
 
+        <!-- Raise above the reading, lower below it: with a dead touch strip, the reading sits in the strip
+             and the buttons above and below it. -->
         <div id="z-adjust" class="card hidden">
-          <div class="row between">
+          <div class="zgrid z-up">
+            <button class="btn" data-zstep="1"><svg><use href="#i-up"/></svg>1</button>
+            <button class="btn" data-zstep="0.1"><svg><use href="#i-up"/></svg>0.1</button>
+            <button class="btn" data-zstep="0.05"><svg><use href="#i-up"/></svg>0.05</button>
+            <button class="btn" data-zstep="0.01"><svg><use href="#i-up"/></svg>0.01</button>
+          </div>
+          <div class="row between z-reading">
             <div>
               <div class="muted" id="z-tool-label">Left nozzle</div>
               <div class="zread num" id="z-read">–</div>
@@ -408,17 +416,13 @@
             </div>
             <div class="muted" style="max-width:52%;font-size:calc(14px * var(--ts))" id="z-instr"></div>
           </div>
-          <div class="zgrid" style="margin-top:12px">
-            <button class="btn" data-zstep="1"><svg><use href="#i-up"/></svg>1</button>
-            <button class="btn" data-zstep="0.1"><svg><use href="#i-up"/></svg>0.1</button>
-            <button class="btn" data-zstep="0.05"><svg><use href="#i-up"/></svg>0.05</button>
-            <button class="btn" data-zstep="0.01"><svg><use href="#i-up"/></svg>0.01</button>
+          <div class="zgrid z-down">
             <button class="btn" data-zstep="-1"><svg><use href="#i-down"/></svg>1</button>
             <button class="btn" data-zstep="-0.1"><svg><use href="#i-down"/></svg>0.1</button>
             <button class="btn" data-zstep="-0.05"><svg><use href="#i-down"/></svg>0.05</button>
             <button class="btn" data-zstep="-0.01"><svg><use href="#i-down"/></svg>0.01</button>
           </div>
-          <div class="split-edges" style="margin-top:12px">
+          <div class="split-edges">
             <button class="btn big" data-act="z-cancel">Cancel</button>
             <button class="btn big ok" data-act="z-accept">Paper drags: save</button>
           </div>

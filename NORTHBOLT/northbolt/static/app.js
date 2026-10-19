@@ -30,22 +30,29 @@ function applyDeadZone() {
   else { st.removeProperty('--dz-top'); st.removeProperty('--dz-bottom'); }
 }
 
-// Text size (settings.text_size, % of normal) for the printer's own 800x480 screen; phones and
-// computers keep normal text. Remembered locally so the first paint already has the right size.
-// ?ts=75 tries a size on any device.
-const TS_FORCE = Number((/[?&]ts=(\d+)/.exec(location.search) || [])[1]) || 0;
-function applyTextSize() {
-  let pct = TS_FORCE || 100;
-  if (!TS_FORCE && KIOSK) {
-    if (S && S.config && S.config.text_size) {
-      pct = S.config.text_size;
-      try { localStorage.setItem('northbolt-text-size', String(pct)); } catch (e) { /* storage blocked */ }
+// Text size (settings.text_size) and the size of buttons, cards and spacing (settings.ui_size), in % of
+// normal, for the printer's own 800x480 screen; phones and computers keep 100 %. Remembered locally so
+// the first paint already has the right size. ?ts=75&us=80 tries sizes on any device.
+const SIZE_FORCE = {
+  ts: Number((/[?&]ts=(\d+)/.exec(location.search) || [])[1]) || 0,
+  u: Number((/[?&]us=(\d+)/.exec(location.search) || [])[1]) || 0,
+};
+function screenSize(cssVar, key, fallback) {
+  let pct = SIZE_FORCE[cssVar] || 100;
+  if (!SIZE_FORCE[cssVar] && KIOSK) {
+    if (S && S.config && S.config[key]) {
+      pct = S.config[key];
+      try { localStorage.setItem(`northbolt-${key}`, String(pct)); } catch (e) { /* storage blocked */ }
     } else {
-      try { pct = Number(localStorage.getItem('northbolt-text-size')) || 75; } catch (e) { pct = 75; }
+      try { pct = Number(localStorage.getItem(`northbolt-${key}`)) || fallback; } catch (e) { pct = fallback; }
     }
   }
-  const ts = String(pct / 100);
-  if (document.documentElement.style.getPropertyValue('--ts') !== ts) document.documentElement.style.setProperty('--ts', ts);
+  const v = String(pct / 100);
+  if (document.documentElement.style.getPropertyValue(`--${cssVar}`) !== v) document.documentElement.style.setProperty(`--${cssVar}`, v);
+}
+function applyTextSize() {
+  screenSize('ts', 'text_size', 75);
+  screenSize('u', 'ui_size', 80);
 }
 
 // Start-up splash. On the printer's own screen, once per browser start (so once per power-on), it
@@ -1871,7 +1878,8 @@ const FORMS = {
       num('zoffset.bed_temp', 'Bed temperature', '°C', 0, 110, 5), num('zoffset.nozzle_temp', 'Nozzle temperature', '°C', 0, 250, 5, 'Warm, but cool enough not to ooze'),
       tog('zoffset.use_mesh', 'Use the bed mesh while measuring')] },
     { title: 'Machine', fields: [tog('lift_mechanism', 'Right nozzle has a lift mechanism', 'Gives the right nozzle its own Z offset (M206 E)')] },
-    { title: 'Screen', fields: [num('text_size', 'Text size on the printer\'s screen', '%', 50, 120, 5, 'Phones and computers keep normal text')] },
+    { title: 'Screen', fields: [num('text_size', 'Text size on the printer\'s screen', '%', 50, 120, 5, 'Phones and computers keep normal text'),
+      num('ui_size', 'Button and card size on the printer\'s screen', '%', 60, 120, 5, 'Smaller fits more above and below a dead touch strip')] },
   ],
   recovery: [
     { title: 'Power-loss recovery', fields: [tog('recovery.enabled', 'Save progress for power-loss recovery'),

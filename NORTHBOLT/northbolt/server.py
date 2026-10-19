@@ -21,7 +21,7 @@ MAX_UPLOAD = 1024 * 1024 * 1024
 LOCAL = ("127.0.0.1", "::1", "localhost")
 EDITABLE = {"firmware", "software", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
             "lift_mechanism", "serial_port", "baudrate", "auto_connect", "power_button_gpio",
-            "require_key_remote", "touch_dead_zone", "boot_intro", "text_size"}
+            "require_key_remote", "touch_dead_zone", "boot_intro", "text_size", "ui_size"}
 
 
 def write_boot_js(settings):
@@ -456,10 +456,11 @@ def make_app(svc):
             sw = changes["software"]
             if not isinstance(sw, dict) or set(sw) - allowed:
                 raise ValueError(f"software: only {', '.join(sorted(allowed))} can be changed here")
-        if "text_size" in changes:
-            size = changes["text_size"]
-            if isinstance(size, bool) or not isinstance(size, (int, float)) or not 50 <= size <= 150:
-                raise ValueError("text_size must be between 50 and 150 (%)")
+        for key in ("text_size", "ui_size"):
+            if key in changes:
+                size = changes[key]
+                if isinstance(size, bool) or not isinstance(size, (int, float)) or not 50 <= size <= 150:
+                    raise ValueError(f"{key} must be between 50 and 150 (%)")
         if "touch_dead_zone" in changes:
             changes["touch_dead_zone"] = check_dead_zone(changes["touch_dead_zone"])
         svc.settings.update(changes)
