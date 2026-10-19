@@ -41,8 +41,8 @@ def parse_repo(text):
     return f"{m.group(1)}/{m.group(2)}"
 
 
-def check_hex(data):
-    """Validate Intel HEX text for the ATmega2560. Returns facts about the image or raises."""
+def parse_hex(data):
+    """Intel HEX text -> {address: byte}. Raises FirmwareError for anything malformed."""
     try:
         text = data.decode("ascii")
     except UnicodeDecodeError:
@@ -80,6 +80,49 @@ def check_hex(data):
             raise FirmwareError(f"Unknown record type on line {n}")
     if not end_seen or not image:
         raise FirmwareError("The file is incomplete")
+    return image
+
+
+def emit_hex(image, chunk=16):
+    """{address: byte} -> Intel HEX text (extended linear address records past 64 KB)."""
+    lines = []
+    upper = 0
+    addrs = sorted(image)
+    i = 0
+    while i < len(addrs):
+        start = addrs[i]
+        data = [image[start]]
+        i += 1
+        # a run of consecutive bytes, at most `chunk` long and not crossing a 64 KB boundary
+        while i < len(addrs) and addrs[i] == start + len(data) and len(data) < chunk \
+                and (addrs[i] >> 16) == (start >> 16):
+            data.append(image[addrs[i]])
+            i += 1
+        if start >> 16 != upper:
+            upper = start >> 16
+            rec = bytes([2, 0, 0, 4, upper >> 8, upper & 0xFF])
+            lines.append(":" + (rec + bytes([-sum(rec) & 0xFF])).hex().upper())
+        rec = bytes([len(data), (start >> 8) & 0xFF, start & 0xFF, 0]) + bytes(data)
+        lines.append(":" + (rec + bytes([-sum(rec) & 0xFF])).hex().upper())
+    lines.append(":00000001FF")
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
+def app_only(data):
+    """A firmware read off the board (avrdude -U flash:r) holds the whole 256 KB flash: the printer
+    firmware, then empty (0xFF) space, then the bootloader at the top. Keep only the firmware: below the
+    bootloader, without the empty tail. That is what gets saved as the backup and written back."""
+    image = parse_hex(data)
+    used = [a for a, b in image.items() if a < APP_LIMIT and b != 0xFF]
+    if not used:
+        raise FirmwareError("The board's flash is empty")
+    end = max(used) + 1                          # one pass: everything after this is empty flash
+    return emit_hex({a: b for a, b in image.items() if a < end})
+
+
+def check_hex(data):
+    """Validate Intel HEX text for the ATmega2560. Returns facts about the image or raises."""
+    image = parse_hex(data)
     top = max(image) + 1
     if top > APP_LIMIT:
         raise FirmwareError("The firmware is too big: it would overwrite the bootloader")
@@ -381,9 +424,12 @@ class FirmwareUpdater:
                     fh.write(data)
                 label = self.release["tag"]
             else:
-                new_path = os.path.join(self.dir, self.backup()["file"])
-                with open(new_path, "rb") as fh:
-                    info = check_hex(fh.read())
+                with open(os.path.join(self.dir, self.backup()["file"]), "rb") as fh:
+                    data = app_only(fh.read())    # older backups may still hold the bootloader area
+                info = check_hex(data)
+                new_path = os.path.join(self.dir, "restore.hex")
+                with open(new_path, "wb") as fh:
+                    fh.write(data)
                 label = "the backup"
             self._set("working", phase="prepare", message=f"Installing {info['name']}")
             if svc.link.ready:
@@ -399,8 +445,12 @@ class FirmwareUpdater:
                 backup = os.path.join(self.dir, f"backup-{stamp}.hex")
                 self._set(phase="backup", progress=0, message="Saving the current firmware as a backup")
                 await self._avrdude("r", backup, ["backup"])
+                # the read holds the whole flash, bootloader included: keep the firmware part only
                 with open(backup, "rb") as fh:
-                    check_hex(fh.read())        # make sure the backup itself is usable
+                    data = app_only(fh.read())
+                check_hex(data)                 # make sure the backup itself is usable
+                with open(backup, "wb") as fh:
+                    fh.write(data)
                 for old in sorted(glob.glob(os.path.join(self.dir, "backup-*.hex")))[:-3]:
                     os.unlink(old)
             self._set(phase="write", progress=0, message=f"Writing {label} to the printer board. Don't turn it off.")

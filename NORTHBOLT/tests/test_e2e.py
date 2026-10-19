@@ -314,7 +314,7 @@ class ApiTests(E2EBase):
         self.assertIsNone(self.rig.get("/api/settings")["touch_dead_zone"])
 
     def test_led_settings_and_test(self):
-        self.assertEqual(self.rig.state()["leds"]["event"], "idle")
+        self.rig.wait(lambda s: s["leds"]["event"] == "idle", 10, "the LED state")    # set once a second
         self.rig.post("/api/settings", {"leds": {"events": {"done": {"color": "#00ff00", "mode": "breathe"}}}})
         leds = self.rig.get("/api/settings")["leds"]
         self.assertEqual(leds["events"]["done"], {"mode": "breathe", "color": "#00ff00"})
@@ -533,8 +533,11 @@ class FirmwareUpdateTests(E2EBase):
         self.rig.wait(lambda s: len(self.calls()) == 3 and s["firmware_update"]["state"] in ("done", "error")
                       and s["connection"]["ready"], 60, "restore to finish")
         self.assertEqual([c[0] for c in self.calls()], ["r", "w", "w"])   # no second backup on restore
+        from northbolt.firmware import APP_LIMIT, parse_hex
         with open(self.flash, "rb") as fh:
-            self.assertEqual(fh.read(), self.old_hex)                     # the original firmware is back
+            restored = parse_hex(fh.read())
+        self.assertEqual(restored, parse_hex(self.old_hex))              # the original firmware is back,
+        self.assertLess(max(restored), APP_LIMIT)                        # and the bootloader area untouched
 
     def test_bad_checksum_never_flashes(self):
         self.digest = "sha256:" + "0" * 64

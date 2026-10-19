@@ -344,6 +344,23 @@ class LevelingTests(unittest.TestCase):
 
 
 class FirmwareTests(unittest.TestCase):
+    def test_backup_read_keeps_only_the_firmware(self):
+        """A real flash read holds the whole 256 KB: firmware, empty flash, then the bootloader. As read it
+        fails the size check (the bug seen on the printer); trimmed it's exactly the firmware again."""
+        from helpers import fake_firmware
+        from northbolt.firmware import APP_LIMIT, FirmwareError, app_only, check_hex, emit_hex, parse_hex
+        firmware = parse_hex(fake_firmware("Marlin board"))
+        full = dict(firmware)
+        full.update({a: 0xFF for a in range(max(firmware) + 1, APP_LIMIT)})
+        full.update({APP_LIMIT + i: 0x0C for i in range(8192)})
+        read = emit_hex(full)
+        with self.assertRaises(FirmwareError):
+            check_hex(read)
+        trimmed = app_only(read)
+        self.assertEqual(parse_hex(trimmed), firmware)
+        self.assertEqual(check_hex(trimmed)["name"], "Marlin board")
+        self.assertEqual(parse_hex(emit_hex(firmware)), firmware)      # emit and parse agree past 64 KB
+
     def test_check_hex(self):
         from helpers import fake_firmware, make_hex
         from northbolt.firmware import FirmwareError, check_hex
