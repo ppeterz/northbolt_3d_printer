@@ -42,7 +42,7 @@ It runs the screen on the printer and is also usable from a phone or computer on
   Tapping it lists nearby networks. Tap one and an on-screen keyboard opens for the password.
   You can also join hidden networks, forget saved ones, turn Wi-Fi on or off, and set the Wi-Fi country.
 - **On-screen keyboard** for every text box on the Pi's screen, which has no system keyboard. Phones and computers use their own keyboard.
-- **Firmware updates from GitHub** (Settings → Firmware): it installs the latest release's printer firmware over the USB
+- **Firmware updates from GitHub** (Settings → Updates): it installs the latest release's printer firmware over the USB
   cable. Nobody types a repository link: it's the one NORTHBOLT was installed from (recorded in `/etc/northbolt/install.conf`),
   else `https://github.com/ppeterz/northbolt_3d_printer`; `firmware.github_repo` in `settings.json` overrides both. It saves a backup of the current firmware first, and can restore it.
   It also checks by itself, shortly after start-up and then every 6 hours. When the latest release differs from what the board runs,
@@ -110,7 +110,7 @@ firmware, so nothing to set up):
 
 - **It checks by itself** every 6 hours, for new commits that change the `NORTHBOLT` folder. When one is newer than the
   installed copy, the screen offers it (**Later**, **Skip this version**, **Update**), and Settings shows an orange dot.
-- **Or by hand**: **Settings → System → NORTHBOLT software → Check now / Update now**.
+- **Or by hand**: **Settings → Updates → NORTHBOLT software → Check now / Update now**. The same tab has the printer board firmware below it: that changes rarely and updates separately.
 
 An update takes a minute or two and refuses to start while printing. The screen shows its progress and reloads itself
 when it's done. Settings and files in `~/northbolt-data` are kept. If the boot splash or the start-up line changed, it

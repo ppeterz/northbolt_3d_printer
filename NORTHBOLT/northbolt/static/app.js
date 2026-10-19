@@ -985,11 +985,14 @@ const FW_PHASES = {
 
 function firmwareCard() {
   const fw = settings.firmware || {};
+  // Settings -> Updates: the screen software (NORTHBOLT) first, then the printer board's firmware.
+  // They update separately: the firmware changes rarely, NORTHBOLT often.
   const card = el(`<div class="stack">
+    <div class="card stack"><div class="stack" id="sys-software"></div><div id="sys-software-auto"></div></div>
     <div class="card stack">
       <h3>Printer board firmware</h3>
       <div class="row between"><span class="muted">Running now</span><b class="num" id="fw-now" style="text-align:right">–</b></div>
-      <div class="muted" style="font-size:calc(13px * var(--ts))">New NORTHBOLT firmware is published online. The printer checks for it and installs it from here.</div>
+      <div class="muted" style="font-size:calc(13px * var(--ts))">The program inside the printer board (motors, heaters). It changes rarely, separately from the screen software above.</div>
     </div>
     <div class="card" id="fw-auto"></div>
     <div class="split-edges">
@@ -999,6 +1002,8 @@ function firmwareCard() {
     <div id="fw-release"></div>
     <div id="fw-status"></div>
   </div>`);
+  $('#sys-software-auto', card).appendChild(fieldNode(tog('software.auto_check', 'Check for updates by itself',
+    'Looks online every few hours and offers new versions on this screen')));
   const auto = $('#fw-auto', card);
   auto.appendChild(el('<div class="muted num" id="fw-avail" style="font-size:calc(14px * var(--ts));padding-bottom:4px"></div>'));
   auto.appendChild(fieldNode(tog('firmware.auto_check', 'Check for updates by itself',
@@ -1254,6 +1259,7 @@ function updateRail() {
 
 function showPage(name) {
   if (name === 'wifi') { ui.tab = 'wifi'; name = 'settings'; }
+  else if (name === 'settings' && page !== 'settings' && (ui.fwDot || ui.swDot)) ui.tab = 'firmware';   // an update waits: open Updates
   else if (name === 'settings' && ui.tab === 'wifi') ui.tab = 'general';   // the Settings button opens General
   page = name;
   updateRail();
@@ -2133,7 +2139,6 @@ function systemCard() {
       <div class="row">${KIOSK ? `<button class="btn" id="sys-touch-clear">Clear</button>
         <button class="btn primary" id="sys-touch-test">Touch test</button>` : ''}</div>
     </div>
-    <div class="card stack"><div class="stack" id="sys-software"></div><div id="sys-software-auto"></div></div>
     <div class="card stack"><h3>Use from a phone or computer</h3>
       ${urls.length ? urls.map(u => `<div class="num" style="font-size:calc(18px * var(--ts))">${esc(u)}</div>`).join('') : '<div class="muted">No network address found.</div>'}
       ${system.api_key ? `<div class="row between"><span class="muted">API key (also for slicer upload)</span><b class="num" style="user-select:text">${esc(system.api_key)}</b></div>` : ''}
@@ -2144,8 +2149,6 @@ function systemCard() {
       <span class="muted">NORTHBOLT ${esc(system.version)}</span></div></div>`);
   $('#sys-key-field', card).appendChild(fieldNode(tog('require_key_remote', 'Require the API key on other devices', 'This screen never needs it')));
   $('#sys-key-field', card).appendChild(fieldNode(tog('boot_intro', 'Play the intro when the printer starts', 'On the printer\'s own screen, after the boot splash. Tap it to skip.')));
-  $('#sys-software-auto', card).appendChild(fieldNode(tog('software.auto_check', 'Check for updates by itself',
-    'Looks online every few hours and offers new versions on this screen')));
   const tz = settings.touch_dead_zone;
   $('#sys-touch-state', card).textContent = tz
     ? `A strip from ${tz.top} to ${tz.bottom} px down doesn't respond. The printer's screen keeps its buttons out of it.`
