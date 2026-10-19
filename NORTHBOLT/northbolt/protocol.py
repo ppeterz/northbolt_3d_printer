@@ -356,13 +356,14 @@ class MarlinLink:
             cmd.future.set_result(cmd.response)
         self._dispatch()
 
-    async def _watchdog_task(self, after=8.0):
+    async def _watchdog_task(self, after=4.0, quiet=3.0):
         """Recover from a lost line or a lost 'ok': if nothing but temperature reports arrives for a
         while, send the line in flight again. If the firmware never got it (a byte lost on the wire
         can turn a line into a comment, which gets no answer), it runs it now. If it did, it asks for
         the next line instead (see _on_resend), and the "ok" after that answers this one. An
         unnumbered poke (M105) would get an "ok" that looks like this line's answer, and the next
-        line would be rejected for the missing one."""
+        line would be rejected for the missing one. A working board reports "busy" every 2 s, so
+        a few seconds of silence is enough: every second the head stands still leaves a blob."""
         try:
             while True:
                 await asyncio.sleep(1.0)
@@ -371,7 +372,7 @@ class MarlinLink:
                     continue
                 now = time.monotonic()
                 waited = now - cmd.written_at
-                busy_recent = now - self._last_busy < 6.0
+                busy_recent = now - self._last_busy < quiet
                 if waited > after and not busy_recent and now - self._last_tickle > after:
                     self._last_tickle = now
                     self.stats["tickles"] += 1
