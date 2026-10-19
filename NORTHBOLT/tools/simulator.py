@@ -91,6 +91,9 @@ class Firmware:
         self.error_rate = error_rate
         self.writer = None
         self.dead = False
+        self.stop_pending = False   # M410/M411 seen, acted on after the current command
+        self.clear_pending = False
+        self.drop = None            # admin "drop <command>": that numbered line gets lost once
         # EEPROM-persisted values
         self.eeprom = eeprom or {"ho": 0.4, "e0": 0.4, "e1": 0.9, "zprobe": 0.0}
         self.ho = self.eeprom["ho"]          # home_offset[Z]
@@ -165,15 +168,18 @@ class Firmware:
         if bare == "M108":
             self.wait_for_heatup = False
         if bare in ("M410", "M411"):
-            self.planner_end = time.monotonic()
-            self.planner_count = 0
-            if bare == "M411":
-                while not self.queue.empty():
-                    self.queue.get_nowait()
-                return
+            # Skriware's RX interrupt only raises a flag: the main loop stops the moves (and for M411
+            # empties the command queue) once the command it is running has finished. Lines read
+            # before then are wiped too. The M410/M411 line itself is then read like any other.
+            self.stop_pending = True
+            self.clear_pending = self.clear_pending or bare == "M411"
         if line.startswith("N"):
             m = re.match(r"N(\d+)\s+(.*)", line)
             n = int(m.group(1)) if m else -1
+            if self.drop and m and m.group(2).split("*")[0].strip() == self.drop:
+                # a byte lost on the wire turned the line into a comment: no answer at all
+                self.drop = None
+                return
             is_m110 = "M110" in line
             if not is_m110 and n != self.last_n + 1:
                 self.out(f"BAD COMMAND:{line}")
@@ -392,7 +398,8 @@ class Firmware:
         elif code == "M110":
             if p.get("N") is not None:       # gcode_M110: gcode_LastN = N
                 self.last_n = int(p["N"])
-        elif code in ("M84", "M106", "M107", "M220", "M221", "M999", "M117", "M73", "M18"):
+        elif code in ("M84", "M106", "M107", "M220", "M221", "M999", "M117", "M73", "M18",
+                      "M108", "M410", "M411"):   # the last three acted in the RX interrupt already
             pass
         else:
             self.out(f'echo:Unknown command: "{cmd}"')
@@ -455,8 +462,12 @@ class Firmware:
 
     async def busy_sleep(self, seconds):
         end = time.monotonic() + seconds / self.speed
-        while time.monotonic() < end:
-            await asyncio.sleep(0.02)
+        was, self.busy = self.busy, True      # HOST_KEEPALIVE: "busy: processing" meanwhile
+        try:
+            while time.monotonic() < end:
+                await asyncio.sleep(0.02)
+        finally:
+            self.busy = was
 
     async def heat_wait(self, key):
         self.wait_for_heatup = True
@@ -578,6 +589,14 @@ class Simulator:
                 continue
             if not fw.dead:
                 fw.out("ok")
+            if fw.stop_pending:             # end of Marlin's loop(): the M410/M411 flags
+                fw.stop_pending = False
+                fw.planner_end = time.monotonic()
+                fw.planner_count = 0
+                if fw.clear_pending:
+                    fw.clear_pending = False
+                    while not fw.queue.empty():
+                        fw.queue.get_nowait()
 
     async def handle_admin(self, reader, writer):
         line = (await reader.readline()).decode().strip()
@@ -603,6 +622,8 @@ class Simulator:
             self.cut_power()
         elif parts[0] == "poweron":
             self.off = False
+        elif parts[0] == "drop" and fw and len(parts) > 1:
+            fw.drop = line.split(None, 1)[1]
         elif parts[0] == "cut" and len(parts) > 2 and parts[1] in ("before", "after"):
             self.cut_at = (parts[1], line.split(None, 2)[2])
         elif parts[0] == "bed" and fw and len(parts) == 4:

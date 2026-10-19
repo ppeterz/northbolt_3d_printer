@@ -96,6 +96,55 @@ class PrintTests(E2EBase):
         self.assertLess(start + 5, hist.index("G28"), "heated before the file's own start code")
 
 
+class LinkTests(E2EBase):
+    """What the printer's console showed on 2026-10-19: a line got lost on the wire, and after a cancel
+    the board still expected the old line numbers (BAD COMMAND:N1 ... Last Line: 305)."""
+
+    def test_lost_line_is_sent_again(self):
+        cmds = self.make(layers=4, segs=12)
+        lost = extrusion_lines(cmds)[20]
+        self.rig.admin(f"drop {lost}")
+        self.start_print()
+        st = self.wait_done(240)
+        self.assertEqual(st["job"]["state"], "finished", st["job"])
+        self.assertGreater(st["connection"]["stats"]["tickles"], 0)
+        self.assert_each_once(cmds, self.rig.sim_history())       # the lost line ran once, in its place
+
+    def test_board_on_other_line_numbers_is_renumbered(self):
+        self.rig.admin("set last_n 305")                             # it missed our M110, like after that cancel
+        r = self.rig.post("/api/console", {"command": "M114"})
+        self.assertTrue(any("X:" in l for l in r.get("response", [])), r)
+        self.assertTrue(self.rig.state()["connection"]["ready"])
+
+    def test_cancel_while_the_board_is_busy(self):
+        # the board clears its queue only after the command it is running: G4 S100 here, a slow move
+        # or homing on the printer. The renumbering must not be sent into the queue being wiped.
+        path = os.path.join(self.rig.data, "src-slow.gcode")
+        with open(path, "w", newline="\n") as fh:
+            fh.write("G28\nG1 Z5 F600\nG4 S100\n" + "".join(f"G1 X{10 + i} Y20 F1200\n" for i in range(40)))
+        self.assertEqual(self.rig.upload(path, "slow.gcode")[0], 200)
+        def wait_history(pred, what):
+            end = time.time() + 60
+            while time.time() < end:
+                h = self.rig.sim_history()
+                if pred(h):
+                    return h
+                time.sleep(0.05)
+            self.fail(f"Timed out waiting for {what}: {self.rig.sim_history(20)}\n{self.rig.tail()}")
+
+        self.rig.post("/api/print", {"file": "slow.gcode"})
+        wait_history(lambda h: "G4 S100" in h, "the dwell")
+        self.rig.post("/api/job/cancel")
+        st = self.rig.wait(lambda s: s["job"]["state"] in ("cancelled", "error"), 60, "the cancel")
+        self.assertEqual(st["job"]["state"], "cancelled", st["job"])
+        hist = wait_history(lambda h: h and h[-1] == "M84", "the clean-up after the cancel")
+        tail = hist[hist.index("G4 S100") + 1:]
+        self.assertIn("M104 T0 S0", tail)                           # the heaters went off
+        self.assertNotIn("G1 X39 Y20 F1200", tail)                  # the rest of the file never ran
+        r = self.rig.post("/api/console", {"command": "M114"})      # and the link still works
+        self.assertTrue(any("X:" in l for l in r.get("response", [])), r)
+
+
 class PauseTests(E2EBase):
     def test_pause_park_resume(self):
         cmds = self.make(layers=12, segs=40)

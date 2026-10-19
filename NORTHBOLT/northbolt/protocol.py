@@ -42,6 +42,14 @@ def checksum(text):
     return cs
 
 
+def m110_line(n):
+    """'N<n> M110 N<n>*<checksum>': sets the firmware's last line number to n. A numbered M110 takes
+    effect as soon as Marlin reads the line (get_serial_commands); a plain "M110 N0" only once the
+    queue reaches it, so a queue clear (M411) or a long command ahead of it could lose it."""
+    body = f"N{n} M110 N{n}"
+    return f"{body}*{checksum(body)}"
+
+
 def find_serial_port():
     import glob
     import os
@@ -137,7 +145,7 @@ class MarlinLink:
             await asyncio.sleep(0.5 if port.startswith("socket://") else 2.0)
         except asyncio.TimeoutError:
             log.info("No 'start' from firmware, assuming it is already running")
-        await self.command("M110 N0", numbered=False)
+        await self.command(m110_line(0), numbered=False)
         self.ready = True
         self.on_connection(True, "connected")
 
@@ -215,15 +223,20 @@ class MarlinLink:
         self._write((text.strip() + "\n").encode("ascii"))
         log.warning("Emergency command %s", text)
 
-    async def resync(self, drain=1.0):
-        """After M411/M410 the firmware may drop queued lines and their oks. Start over."""
+    async def resync(self, drain=1.0, quiet=2.5, limit=120.0):
+        """After M411/M410 the firmware drops its queued lines and their oks. It does that only once
+        the command it is running has finished, and a line sent before then is wiped as well. That
+        command reports "busy" every 2 s, so wait until those stop, then start the numbering over."""
         self._resyncing = True
         self._fail_all(CommandCancelled("Command queue cleared"))
+        start = time.monotonic()
         await asyncio.sleep(drain)
+        while self.connected and time.monotonic() - start < limit and time.monotonic() - self._last_busy < quiet:
+            await asyncio.sleep(0.1)
         self._next_n = 1
         self._history.clear()
         self._resyncing = False
-        await self.command("M110 N0", priority=True, numbered=False)
+        await self.command(m110_line(0), priority=True, numbered=False)
 
     def _write(self, data):
         with self._write_lock:
@@ -300,17 +313,26 @@ class MarlinLink:
     async def _after_restart(self):
         await asyncio.sleep(1.5)
         try:
-            await self.command("M110 N0", priority=True, numbered=False)
+            await self.command(m110_line(0), priority=True, numbered=False)
         except Exception:
             pass
 
     def _on_resend(self, n):
         self.stats["resends"] += 1
-        if n not in self._history:
-            log.error("Firmware asked to resend line %d which is no longer in history", n)
-            self._fail_all(LinkError(f"Cannot resend line {n}"))
-            return
         last = self._next_n - 1
+        if n == last + 1:
+            # It has every line we sent (the watchdog repeated one it already had). Nothing to send;
+            # the "ok" that follows answers the line in flight.
+            log.info("Firmware already has line %d", last)
+            return
+        if n not in self._history:
+            # Its numbering isn't ours: our reset (M110) never reached it, so it rejected every line
+            # since. Renumber it to just before the first of those, then send them again.
+            first = self._inflight.n if self._inflight is not None and self._inflight.n else last + 1
+            self._resend = deque([m110_line(first - 1)] +
+                                 [self._history[k] for k in range(first, last + 1) if k in self._history])
+            log.warning("Firmware wants line %d but we are at %d: renumbering it to %d", n, last, first - 1)
+            return
         self._resend = deque(self._history[k] for k in range(n, last + 1) if k in self._history)
         log.warning("Resend requested from line %d (%d lines)", n, len(self._resend))
 
@@ -334,8 +356,13 @@ class MarlinLink:
             cmd.future.set_result(cmd.response)
         self._dispatch()
 
-    async def _watchdog_task(self):
-        """Recover from a lost 'ok': if nothing but temperature reports arrives for a while, poke."""
+    async def _watchdog_task(self, after=8.0):
+        """Recover from a lost line or a lost 'ok': if nothing but temperature reports arrives for a
+        while, send the line in flight again. If the firmware never got it (a byte lost on the wire
+        can turn a line into a comment, which gets no answer), it runs it now. If it did, it asks for
+        the next line instead (see _on_resend), and the "ok" after that answers this one. An
+        unnumbered poke (M105) would get an "ok" that looks like this line's answer, and the next
+        line would be rejected for the missing one."""
         try:
             while True:
                 await asyncio.sleep(1.0)
@@ -345,11 +372,13 @@ class MarlinLink:
                 now = time.monotonic()
                 waited = now - cmd.written_at
                 busy_recent = now - self._last_busy < 6.0
-                if waited > 12.0 and not busy_recent and now - self._last_tickle > 12.0:
+                if waited > after and not busy_recent and now - self._last_tickle > after:
                     self._last_tickle = now
                     self.stats["tickles"] += 1
-                    log.warning("No 'ok' for %s after %.0fs, sending M105", cmd.text, waited)
-                    self._write(b"M105\n")
+                    line = self._history.get(cmd.n) if cmd.numbered else None
+                    log.warning("No 'ok' for %s after %.0fs, sending %s", cmd.text, waited,
+                                "it again" if line else "M105")
+                    self._write((line + "\n").encode("ascii", "replace") if line else b"M105\n")
         except asyncio.CancelledError:
             pass
 
