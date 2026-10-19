@@ -77,7 +77,7 @@ static bool lift_board_send(const byte cmd) {
 static void lift_board_failed() {
   SERIAL_ERROR_START();
   SERIAL_ERRORLNPGM("Extruder lift board not responding. Check its cable.");
-  kill(PSTR("Extruder lift board"));
+  kill("Extruder lift board");
 }
 
 void Extruder_Up(){

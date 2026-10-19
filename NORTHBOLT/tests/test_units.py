@@ -427,6 +427,34 @@ class ReadableTests(unittest.TestCase):
         self.assertEqual(len(readable("x" * 500)), 160)
 
 
+class HaltReasonTests(unittest.TestCase):
+    def test_nb2_heating_halt_names_the_heater(self):
+        from northbolt.printer import PrinterService
+
+        class Fake:
+            _last_error_line = None
+            halted = None
+            alerts = {}
+
+            def alert(self, level, text, key=None):
+                self.alerts[key] = text
+
+            def link_fail(self, reason):
+                pass
+
+        p = Fake()
+        for line in ("Error:Heating Error. Heater ID: Bed",                  # what NB2 prints, in order
+                     "Error:Heating failed, system stopped! Heater_ID: bed",
+                     "Error:Heating failed",
+                     "Error:Printer halted. kill() called!"):
+            PrinterService._on_error(p, line)
+        self.assertEqual(p.halted, "Heating failed, system stopped! heater: bed")
+        self.assertIn("heater: bed", p.alerts["thermal"])
+        p._last_error_line = None
+        PrinterService._on_error(p, "Error:Heating Error. Heater ID: 1")
+        self.assertEqual(p._last_error_line, "Heating Error. heater: right nozzle")
+
+
 class StartTempsTests(unittest.TestCase):
     def scan(self, text):
         from northbolt.gcode import start_temps

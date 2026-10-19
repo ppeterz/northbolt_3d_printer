@@ -48,7 +48,7 @@
   #ifdef NB_RELEASE
     #define DETAILED_BUILD_VERSION SHORT_BUILD_VERSION " (Github, " STRINGIFY(NB_RELEASE) ")"
   #else
-    #define DETAILED_BUILD_VERSION SHORT_BUILD_VERSION " (Github, NB1 safety fixes)"
+    #define DETAILED_BUILD_VERSION SHORT_BUILD_VERSION " (Github, NB2 safety fixes)"
   #endif
 
   /**

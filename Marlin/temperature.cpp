@@ -62,6 +62,16 @@
 
 Temperature thermalManager;
 
+// Skriware's host software looks for "Heating Error. Heater ID: <n|Bed>". It used to be built with
+// sprintf in RAM and handed to _temp_error, which prints with serialprintPGM (that reads flash), so
+// the halt reason came out as a screenful of garbage. Print it here; _temp_error gets flash text.
+static void heating_error_line(const int8_t e) {
+  if (!IsRunning()) return;            // once: _temp_error stops the printer
+  SERIAL_ERROR_START();
+  SERIAL_ERRORPGM("Heating Error. Heater ID: ");
+  if (e >= 0) SERIAL_ERRORLN((int)e); else SERIAL_ERRORLNPGM("Bed");
+}
+
 /**
  * Macros to include the heater id in temp errors. The compiler's dead-code
  * elimination should (hopefully) optimize out the unused strings.
@@ -439,15 +449,13 @@ uint8_t Temperature::soft_pwm_amount[HOTENDS];
                 if (current > watch_temp_target) heated = true;     // - Flag if target temperature reached
               }
               else if (ELAPSED(ms, temp_change_ms)){                 // Watch timer expired
-                char buff[50] = "";
-                sprintf(buff,"Heating Error. Heater ID: %d",hotend);
-                _temp_error(hotend, buff, TEMP_ERR_PSTR(MSG_HEATING_FAILED_LCD, hotend));
+                heating_error_line(hotend);
+                _temp_error(hotend, PSTR(MSG_T_HEATING_FAILED), TEMP_ERR_PSTR(MSG_HEATING_FAILED_LCD, hotend));
               }
             }
             else if (current < target - (MAX_OVERSHOOT_PID_AUTOTUNE)){ // Heated, then temperature fell too far?
-                char buff[50] = "";
-                sprintf(buff,"Heating Error. Heater ID: %d",hotend);
-                _temp_error(hotend, buff, TEMP_ERR_PSTR(MSG_THERMAL_RUNAWAY, hotend));
+                heating_error_line(hotend);
+                _temp_error(hotend, PSTR(MSG_T_THERMAL_RUNAWAY), TEMP_ERR_PSTR(MSG_THERMAL_RUNAWAY, hotend));
               }
           }
         #endif
@@ -580,6 +588,7 @@ int Temperature::getHeaterPower(const int heater) {
 //
 // Temperature Error Handlers
 //
+// serial_msg is flash text (PSTR). Skriware's kill() prints its message from RAM, so it gets a copy.
 void Temperature::_temp_error(const int8_t e, const char * const serial_msg, const char * const lcd_msg) {
   if (IsRunning()) {
     SERIAL_ERROR_START();
@@ -592,7 +601,10 @@ void Temperature::_temp_error(const int8_t e, const char * const serial_msg, con
     if (!killed) {
       Running = false;
       killed = true;
-      kill(serial_msg);
+      char reason[32];
+      strncpy_P(reason, serial_msg, sizeof(reason) - 1);
+      reason[sizeof(reason) - 1] = '\0';
+      kill(reason);
     }
     else
       disable_all_heaters(); // paranoia
@@ -773,7 +785,7 @@ void Temperature::manage_heater() {
   #endif
 
   #if ENABLED(EMERGENCY_PARSER)
-    if (emergency_parser.killed_by_M112) kill(PSTR(MSG_KILLED));
+    if (emergency_parser.killed_by_M112) kill(MSG_KILLED);
   #endif
 
   if (!temp_meas_ready) return;
@@ -824,7 +836,7 @@ void Temperature::manage_heater() {
     #if ENABLED(TEMP_SENSOR_1_AS_REDUNDANT)
       // Make sure measured temperatures are close together
       if (ABS(current_temperature[0] - redundant_temperature) > MAX_REDUNDANT_TEMP_SENSOR_DIFF)
-        _temp_error(0, "Heater switched off. Temperature difference between temp sensors is too high !", PSTR(MSG_ERR_REDUNDANT_TEMP));
+        _temp_error(0, PSTR(MSG_ERR_REDUNDANT_TEMP), PSTR(MSG_ERR_REDUNDANT_TEMP));
     #endif
     if (current_temperature[e] > maxttemp[e]) max_temp_error(e);  //Skriware: each hotend's own limit (was HEATER_0_MAXTEMP for all)
   } // HOTEND_LOOP
@@ -856,7 +868,10 @@ void Temperature::manage_heater() {
       if (watch_bed_next_ms && ELAPSED(ms, watch_bed_next_ms)) {        // Time to check the bed?
         if (degBed() < watch_target_bed_temp) 
                                     // Failed to increase enough?
-          _temp_error(-1, "Heating Error. Heater ID: Bed", TEMP_ERR_PSTR(MSG_HEATING_FAILED_LCD, -1));
+        {
+          heating_error_line(-1);
+          _temp_error(-1, PSTR(MSG_T_HEATING_FAILED), TEMP_ERR_PSTR(MSG_HEATING_FAILED_LCD, -1));
+        }
         else                                                            // Start again if the target is still far off
           start_watching_bed();
       }
@@ -1465,8 +1480,7 @@ void Temperature::init() {
     */
 
     const int heater_index = heater_id >= 0 ? heater_id : HOTENDS;
-    char buff[50] = "";
-    
+
     #if HEATER_IDLE_HANDLER
       // If the heater idle timeout expires, restart
       if ((heater_id >= 0 && heater_idle_timeout_exceeded[heater_id])
@@ -1503,8 +1517,8 @@ void Temperature::init() {
         else if (PENDING(millis(), *timer)) break;
         *state = TRRunaway;
       case TRRunaway:
-        sprintf(buff,"Heating Error. Heater ID: %d",heater_id);
-        _temp_error(heater_id, buff, TEMP_ERR_PSTR(MSG_THERMAL_RUNAWAY, heater_id));
+        heating_error_line(heater_id);
+        _temp_error(heater_id, PSTR(MSG_T_THERMAL_RUNAWAY), TEMP_ERR_PSTR(MSG_THERMAL_RUNAWAY, heater_id));
     }
   }
 

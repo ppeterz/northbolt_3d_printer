@@ -1,10 +1,24 @@
-# Firmware safety fixes (NB1)
+# Firmware safety fixes (NB1, NB2)
 
 Changes to the Skriware 2 firmware in this repository, made with the NORTHBOLT host.
-The board reports them in M115 as `Marlin 1.1.9.9 (Github, NB1 safety fixes)`.
+A release build reports its tag in M115, for example `Marlin 1.1.9.9 (Github, fw-1.1.9.9-NB2)`.
 The EEPROM layout is unchanged, so flashing keeps your saved settings (Z offsets, mesh, PID).
 
-## Printer board (Marlin, MKS Gen 1.3)
+## NB2 (printer board only)
+
+| What | File | NB1 | NB2 |
+|---|---|---|---|
+| Why the printer halted, for heating errors and thermal runaway | `Marlin/temperature.cpp` | one of the two error lines was garbage: text in RAM was printed as if in flash, or flash text as if in RAM | both lines readable, e.g. `Error:Heating Error. Heater ID: Bed` then `Error:Heating failed, system stopped! Heater_ID: bed` |
+| Halt reason for M112, SD sub-call depth and the lift board | `temperature.cpp`, `cardreader.cpp`, `Skriware_Functions.cpp` | flash text passed to Skriware's `kill()`, which prints from RAM | RAM text |
+| Hotend heat-up check | `Marlin/Skriware_Conf_Advanced.h` | 2 °C rise in 20 s | 2 °C in 30 s |
+| Bed heat-up check | same | 2 °C in 60 s | 2 °C in 90 s |
+
+The heat-up checks are between Skriware's original values (1 °C in 45 s and 1 °C in 90 s) and Marlin's defaults:
+NB1 stopped a healthy printer while it heated for bed leveling. A heater whose thermistor has fallen out still fails them by far.
+
+## NB1
+
+### Printer board (Marlin, MKS Gen 1.3)
 
 | What | File | Before | After |
 |---|---|---|---|
@@ -24,7 +38,7 @@ If you get "Thermal Runaway" stops while the part fan runs at full speed and the
 
 **Tool changes take longer:** each tool change with the lift mechanism now takes 0.5 to 1 s longer, because the waits really happen.
 
-## LED and scale board (ATmega328, `Atmega_Soft/led_and_scale`)
+### LED and scale board (ATmega328, `Atmega_Soft/led_and_scale`)
 
 | What | Before | After |
 |---|---|---|
@@ -107,7 +121,7 @@ sudo systemctl start northbolt
 
 **From a PC with the board on USB:** run `pio run -e skriware2 -t upload --upload-port COM5`, using your port.
 
-**After flashing:** check NORTHBOLT under Settings → Connection. The firmware line should end in "NB1 safety fixes".
+**After flashing:** check NORTHBOLT under Settings → Connection. The firmware line should end in the release tag, for example "fw-1.1.9.9-NB2".
 
 The LED and scale board has no USB port. Flashing it needs an ISP programmer (for example a USBasp) on its programming header,
 or whatever method Skriware used. Its fixes matter less than the printer board's, so skip it if you have no programmer.

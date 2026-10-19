@@ -28,6 +28,10 @@ GCODE_EXT = (".gcode", ".gco", ".g")
 SAFE_NAME = re.compile(r"[^\w\-. ()+]")
 
 
+HEATER_ID_RE = re.compile(r"Heater[_ ]ID:\s*(-?\w+)", re.I)
+HEATER_NAMES = {"0": "left nozzle", "1": "right nozzle", "bed": "bed", "-1": "bed"}
+
+
 def readable(text, limit=160):
     """A firmware message fit for the screen. Noise on the serial line (a board resetting, a wrong
     baud rate) arrives as unreadable bytes: say so instead of showing them."""
@@ -253,7 +257,11 @@ class PrinterService:
             return
         if "checksum" in low or "line number" in low or "no checksum" in low or "last line" in low:
             return  # handled by the resend logic
-        self._last_error_line = text
+        text = HEATER_ID_RE.sub(lambda m: "heater: " + HEATER_NAMES.get(m.group(1).lower(), m.group(1)), text)
+        # kill() repeats the start of the message ("Heating failed"): keep the line that says which heater
+        if not (self._last_error_line and self._last_error_line.lower().startswith(text.lower())):
+            self._last_error_line = text
+        text = self._last_error_line
         if any(w in low for w in ("thermal runaway", "mintemp", "maxtemp", "heating failed", "heating error")):
             self.alert("error", f"Temperature error: {text}", key="thermal")
 
