@@ -406,6 +406,23 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(merged["pause"]["retract"], DEFAULTS["pause"]["retract"])
 
 
+class StartTempsTests(unittest.TestCase):
+    def scan(self, text):
+        from northbolt.gcode import start_temps
+        with tempfile.NamedTemporaryFile("w", suffix=".gcode", delete=False) as fh:
+            fh.write(text)
+        try:
+            return start_temps(fh.name)
+        finally:
+            os.unlink(fh.name)
+
+    def test_first_temperatures_before_printing(self):
+        t = self.scan("M140 S60\nM104 S0\nM104 T0 S215\nM190 S60\nG28\nT1\nM109 S230\nG1 X5 E3\nM104 S190\nM140 S70\n")
+        self.assertEqual(t, {"bed": 60.0, "tools": {0: 215.0, 1: 230.0}})       # later changes ignored
+        self.assertEqual(self.scan("M109 R205\nM190 R55\n"), {"bed": 55.0, "tools": {0: 205.0}})
+        self.assertEqual(self.scan("G28\nG1 X10 E2\nM104 S200\n"), {"bed": None, "tools": {}})
+
+
 class RepoTests(unittest.TestCase):
     """Updates know where to come from without anyone typing a GitHub link."""
 

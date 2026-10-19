@@ -19,7 +19,7 @@ log = logging.getLogger("server")
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 MAX_UPLOAD = 1024 * 1024 * 1024
 LOCAL = ("127.0.0.1", "::1", "localhost")
-EDITABLE = {"firmware", "software", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
+EDITABLE = {"firmware", "software", "start", "leveling", "presets", "filament", "pause", "recovery", "runout", "zoffset", "leds", "scales",
             "lift_mechanism", "serial_port", "baudrate", "auto_connect", "power_button_gpio",
             "require_key_remote", "touch_dead_zone", "boot_intro", "text_size", "ui_size"}
 

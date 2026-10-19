@@ -1851,6 +1851,7 @@ const num = (path, label, unit, min, max, step, hint) => ({ type: 'num', path, l
 const tog = (path, label, hint) => ({ type: 'tog', path, label, hint });
 const FORMS = {
   general: [
+    { title: 'Starting a print', fields: [tog('start.heat_at_park', 'Heat up at the back-left corner', 'The head waits there while the bed and nozzle heat, like the original software, then the print starts')] },
     { title: 'Pause', fields: [num('pause.lift', 'Lift when paused', 'mm', 0, 50, 1), num('pause.retract', 'Retract when paused', 'mm', 0, 10, 0.5),
       num('pause.heater_timeout_min', 'Turn nozzles off after', 'min', 0, 120, 5, '0 means never')] },
     { title: 'Filament', fields: [num('filament.load_length', 'Load length', 'mm', 0, 900, 10), num('filament.load_speed', 'Load speed', 'mm/s', 1, 60, 1),

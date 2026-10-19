@@ -334,6 +334,35 @@ def scan_file(path):
     return meta
 
 
+def start_temps(path, limit=512 * 1024):
+    """The first bed and nozzle temperatures a file sets before it starts printing:
+    {"bed": 60.0, "tools": {0: 210.0}}. Reads only the start of the file."""
+    bed = None
+    tools = {}
+    tool = 0
+    with open(path, "rb") as fh:
+        text = fh.read(limit).decode("utf-8", "replace")
+    for raw in text.splitlines():
+        cmd = clean(raw)
+        if not cmd:
+            continue
+        code, p = parse(cmd)
+        if code in ("G0", "G1") and (p.get("E") or 0) > 0:
+            break                                    # it's printing (or purging): heating is set by now
+        if code[:1] == "T" and code[1:].isdigit():
+            tool = int(code[1:])
+        elif code in ("M104", "M109"):
+            temp = p.get("S") if p.get("S") is not None else p.get("R")
+            t = int(p["T"]) if p.get("T") is not None else tool
+            if temp and temp > 0 and t not in tools:
+                tools[t] = temp
+        elif code in ("M140", "M190"):
+            temp = p.get("S") if p.get("S") is not None else p.get("R")
+            if temp and temp > 0 and bed is None:
+                bed = temp
+    return {"bed": bed, "tools": tools}
+
+
 def quick_scan(path, head=1024 * 1024, tail=192 * 1024):
     """Thumbnail, print time and filament from the start and end of a file only.
 

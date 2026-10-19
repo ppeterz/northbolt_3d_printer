@@ -85,6 +85,16 @@ class PrintTests(E2EBase):
         self.assert_each_once(cmds, self.rig.sim_history())
         self.assertIsNone(st["recovery"])
 
+    def test_heats_at_the_back_left_before_the_file(self):
+        self.make(layers=3, segs=8)
+        self.start_print()
+        self.wait_done()
+        hist = self.rig.sim_history()
+        start = hist.index("G28 X Y")
+        self.assertEqual(hist[start:start + 6], ["G28 X Y", "G1 X10 Y265 F6000", "M140 S60", "M104 T0 S200",
+                                                 "M190 S60", "M109 T0 S200"])
+        self.assertLess(start + 5, hist.index("G28"), "heated before the file's own start code")
+
 
 class PauseTests(E2EBase):
     def test_pause_park_resume(self):
