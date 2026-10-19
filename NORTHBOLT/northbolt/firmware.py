@@ -121,10 +121,9 @@ def app_only(data):
 
 
 def check_backup(data):
-    """Check a firmware read off the board (a backup) before relying on it. It has to be a real AVR
-    program that fits below the bootloader. Its name isn't required: whatever the board runs can be backed
-    up, and the original Skriware firmware doesn't carry the "FIRMWARE_NAME: ... SOURCE_CODE_URL" text
-    that check_hex() asks of new firmware. Returns facts about it (name None if it has none)."""
+    """Check a firmware read off the board (a backup) before relying on it: a real AVR program, below the
+    bootloader, with its Marlin firmware name inside (the original Skriware firmware has one:
+    "Marlin 1.1.9.9 (Github)"). A half-written board fails this, so it is never kept as a backup."""
     image = parse_hex(data)
     top = max(image) + 1
     if top > APP_LIMIT:
@@ -135,7 +134,10 @@ def check_backup(data):
                             "Check the USB cable between the Pi and the printer board, then try again.")
     blob = bytes(image.get(i, 0xFF) for i in range(top))
     m = re.search(rb"FIRMWARE_NAME:([^\x00]*?) SOURCE_CODE_URL", blob)
-    return {"size": len(image), "end": top, "name": m.group(1).decode("ascii", "replace") if m else None}
+    if not m:
+        raise FirmwareError("The firmware on the printer board isn't complete Marlin firmware (no firmware name "
+                            "inside), so it can't be saved as a backup. Restore the last backup, or ask for help.")
+    return {"size": len(image), "end": top, "name": m.group(1).decode("ascii", "replace")}
 
 
 def check_hex(data):
@@ -174,6 +176,21 @@ class FirmwareUpdater:
     def busy(self):
         return self.state in ("checking", "working")
 
+    @property
+    def owns_port(self):
+        """avrdude has (or is about to have) the board's serial port. Anything else opening it now -
+        Connect, Reconnect, the automatic reconnect - resets the board and breaks the write."""
+        return self.state == "working" and self.phase in ("prepare", "backup", "write", "verify")
+
+    @property
+    def marker(self):
+        """Present while a write is unfinished: the board then holds half-written firmware."""
+        return os.path.join(self.dir, "write-unfinished")
+
+    @property
+    def incomplete(self):
+        return os.path.exists(self.marker)
+
     def backup(self):
         files = sorted(glob.glob(os.path.join(self.dir, "backup-*.hex")))
         if not files:
@@ -188,6 +205,7 @@ class FirmwareUpdater:
             "available": self.available, "prompt": self.prompt(),
             "last_check": self.last_check, "auto_check": cfg.get("auto_check", True),
             "skipped_tag": cfg.get("skipped_tag"),
+            "incomplete": self.incomplete, "owns_port": self.owns_port,
         }
 
     def _set(self, state=None, phase=None, progress=None, message=None):
@@ -449,7 +467,7 @@ class FirmwareUpdater:
                 with open(new_path, "wb") as fh:
                     fh.write(data)
                 label = "the backup"
-            self._set("working", phase="prepare", message=f"Installing {info['name'] or 'the previous firmware'}")
+            self._set("working", phase="prepare", message=f"Installing {info['name']}")
             if svc.link.ready:
                 for c in ("M104 T0 S0", "M104 T1 S0", "M140 S0"):
                     try:
@@ -458,29 +476,41 @@ class FirmwareUpdater:
                         pass
             await svc.disconnect()              # frees the port and stops auto-reconnect
             await asyncio.sleep(1.0)
-            if download:
+            if download and self.incomplete:
+                # the last write didn't finish: the board holds half-written firmware, nothing worth backing
+                # up, and reading it would only fail. Write again; the last good backup is kept.
+                log.info("Last firmware write didn't finish; writing again without a new backup")
+            elif download:
                 stamp = time.strftime("%Y%m%d-%H%M%S")
-                backup = os.path.join(self.dir, f"backup-{stamp}.hex")
+                reading = os.path.join(self.dir, "reading.hex")
                 self._set(phase="backup", progress=0, message="Saving the current firmware as a backup")
-                await self._avrdude("r", backup, ["backup"])
+                await self._avrdude("r", reading, ["backup"])
                 # the read holds the whole flash, bootloader included: keep the firmware part only
-                with open(backup, "rb") as fh:
-                    data = app_only(fh.read())
-                check_backup(data)              # a real program (any name, or none) that fits
-                with open(backup, "wb") as fh:
+                try:
+                    with open(reading, "rb") as fh:
+                        data = app_only(fh.read())
+                    check_backup(data)          # complete Marlin firmware, below the bootloader
+                except FirmwareError:
+                    os.replace(reading, os.path.join(self.dir, f"bad-read-{stamp}.hex"))   # never a "backup"
+                    raise
+                with open(os.path.join(self.dir, f"backup-{stamp}.hex"), "wb") as fh:
                     fh.write(data)
+                os.unlink(reading)
                 for old in sorted(glob.glob(os.path.join(self.dir, "backup-*.hex")))[:-3]:
                     os.unlink(old)
             self._set(phase="write", progress=0, message=f"Writing {label} to the printer board. Don't turn it off.")
             flashed = True
+            with open(self.marker, "w") as fh:
+                fh.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} writing {label}\n")
             await self._avrdude("w", new_path, ["write", "verify"])
+            os.unlink(self.marker)              # written and verified
             self._set(phase="reconnect", progress=None, message="Reconnecting")
             await asyncio.sleep(2.0)
             await svc.connect()
             fw = svc.firmware or ""
-            self.result = {"expected": info["name"] or "the previous firmware",
+            self.result = {"expected": info["name"],
                            "reported": fw.replace("FIRMWARE_NAME:", "").split(" SOURCE_CODE_URL")[0]}
-            ok = info["name"] is None or info["name"] in fw     # a nameless backup can't be compared
+            ok = info["name"] in fw
             if self.release:                 # after an update (or a restore) recompare with the release
                 try:
                     await self._compare(self.release)
@@ -493,7 +523,8 @@ class FirmwareUpdater:
             log.exception("Firmware update failed")
             self.error = str(exc)
             if flashed:
-                self.error += (" The bootloader is untouched, so you can Retry or Restore the backup.")
+                self.error += (" The write didn't finish, so the printer board won't work until it's written again. "
+                               "The bootloader is untouched: press Install to write it again, or Restore backup.")
             self._set("error", message="")
             try:
                 if not svc.link.connected:

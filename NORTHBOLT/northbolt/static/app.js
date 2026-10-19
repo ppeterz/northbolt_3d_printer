@@ -1413,7 +1413,16 @@ function alertBanners(all = false) {
     out.push(`<div class="banner ${a.level}"><div class="text">${esc(a.text)}</div>${extra}
       <button class="x" data-dismiss="${a.id}" aria-label="Dismiss">×</button></div>`);
   }
-  if (!conn.ready && conn.error && !S.alerts.length) {
+  const fu = S.firmware_update || {};
+  if (fu.owns_port) {
+    // no Connect button here: opening the port now would break the write
+    out.push(`<div class="banner warning"><div class="text"><b>Writing firmware to the printer board.</b>
+      Don't turn the printer off or reconnect until it's finished.</div></div>`);
+  } else if (fu.incomplete && fu.state !== 'working') {
+    out.push(`<div class="banner error"><div class="text"><b>The last firmware write didn't finish.</b>
+      The printer board won't work until it's written again: Settings → Updates → Install, or Restore backup.</div>
+      <button class="btn small" data-act="open-updates">Updates</button></div>`);
+  } else if (!conn.ready && conn.error && !S.alerts.length) {
     out.push(`<div class="banner info"><div class="text">Printer not connected: ${esc(conn.error)}</div>
       <button class="btn small" data-act="connect">Connect</button></div>`);
   }
@@ -2299,6 +2308,7 @@ const ACTIONS = {
       act(b, () => post('/api/job/cancel'));
     }
   },
+  'open-updates': () => { ui.tab = 'firmware'; showPage('settings'); buildTab('firmware'); },
   tune: () => tuneDialog(),
   alerts: () => alertsDialog(),
   preheat: () => preheatDialog(),

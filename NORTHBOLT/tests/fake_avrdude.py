@@ -43,6 +43,22 @@ if mode == "r":
     with open(path, "wb") as fh:
         fh.write(emit_hex(image))
 elif mode == "w":
+    # control files in $FAKE_AVRDUDE_CTRL: "slow" makes the write take 4 s; "break" (used up once) stops it
+    # halfway like a disturbed port does: the start of the new firmware, then scrambled pages, no name.
+    ctrl = os.environ.get("FAKE_AVRDUDE_CTRL", "")
+    if ctrl and os.path.exists(os.path.join(ctrl, "slow")):
+        time.sleep(4.0)
+    if ctrl and os.path.exists(os.path.join(ctrl, "break")):
+        os.unlink(os.path.join(ctrl, "break"))
+        with open(path, "rb") as fh:
+            new = parse_hex(fh.read())
+        half = {a: b for a, b in new.items() if a < 4096}
+        half.update({a: 0x00 for a in range(4096, 0x1C000)})
+        with open(flash, "wb") as fh:
+            fh.write(emit_hex(half))
+        bar("Writing")
+        sys.stderr.write("avrdude: stk500v2_ReceiveMessage(): timeout\navrdude: failed to write flash\n")
+        sys.exit(1)
     bar("Writing")
     shutil.copyfile(path, flash)
     bar("Reading")

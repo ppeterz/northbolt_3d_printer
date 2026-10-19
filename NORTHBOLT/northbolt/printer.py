@@ -123,7 +123,8 @@ class PrinterService:
     async def _connection_task(self):
         while True:
             try:
-                if not self.link.connected and self.settings["auto_connect"] and not self.manual_disconnect:
+                if not self.link.connected and self.settings["auto_connect"] and not self.manual_disconnect \
+                        and not (self.fw and self.fw.owns_port):
                     await self.connect()
             except asyncio.CancelledError:
                 return
@@ -135,7 +136,13 @@ class PrinterService:
                 self.notify("connection")
             await asyncio.sleep(5)
 
+    def _refuse_during_flash(self):
+        if self.fw and self.fw.owns_port:
+            raise RuntimeError("Firmware is being written to the printer board. Wait until it finishes: "
+                               "connecting now would break the write.")
+
     async def connect(self):
+        self._refuse_during_flash()
         self.manual_disconnect = False
         self.halted = None
         self.stopped = False
@@ -161,6 +168,7 @@ class PrinterService:
 
     async def reconnect(self):
         """Close and reopen the port. On USB this resets the board (needed after a halt)."""
+        self._refuse_during_flash()
         await self.link.disconnect("reconnecting")
         await asyncio.sleep(1.0)
         await self.connect()

@@ -513,7 +513,8 @@ class FirmwareUpdateTests(E2EBase):
                                       "avrdude": [sys.executable, os.path.join(here, "fake_avrdude.py")],
                                       **self.extra_fw}}
         # the simulator reports the firmware name found in the "board's" flash file
-        self.env = {"FAKE_AVRDUDE_FLASH": self.flash, "FAKE_AVRDUDE_LOG": self.log, "SIM_FLASH_HEX": self.flash}
+        self.env = {"FAKE_AVRDUDE_FLASH": self.flash, "FAKE_AVRDUDE_LOG": self.log, "SIM_FLASH_HEX": self.flash,
+                    "FAKE_AVRDUDE_CTRL": self.work}
         super().setUp()
 
     def tearDown(self):
@@ -577,11 +578,68 @@ class FirmwareUpdateTests(E2EBase):
         self.rig.wait(lambda s: s["job"]["state"] == "cancelled", 40)
 
 
-class StockBoardFirmwareTests(FirmwareUpdateTests):
-    """The board runs the original Skriware firmware, which has no "FIRMWARE_NAME: ... SOURCE_CODE_URL"
-    text inside: backing it up must still work (it stopped the first update on the printer), and so must
-    restoring it."""
+class FirmwareWriteSafetyTests(FirmwareUpdateTests):
+    """What broke the printer's board on 2026-10-19: something opened the serial port while avrdude was
+    writing, the write stopped halfway, and Retry then tried to back up the half-written board."""
+
+    def ctrl(self, name):
+        open(os.path.join(self.work, name), "w").close()
+
+    def test_connect_refused_while_writing(self):
+        self.ctrl("slow")
+        self.rig.post("/api/firmware/check")
+        self.rig.post("/api/firmware/install")
+        st = self.rig.wait(lambda s: s["firmware_update"]["phase"] == "write", 60, "the write")
+        self.assertTrue(st["firmware_update"]["owns_port"])
+        for action in ("connect", "reconnect"):
+            r = self.rig.post(f"/api/connection/{action}", expect_ok=False)
+            self.assertEqual(r["status"], 400, action)
+            self.assertIn("would break the write", r["error"])
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error"), 60, "update to finish")
+        self.assertEqual(st["firmware_update"]["state"], "done", st["firmware_update"])
+        self.assertEqual([c[0] for c in self.calls()], ["r", "w"])
+
+    def test_interrupted_write_then_install_again(self):
+        from northbolt.firmware import parse_hex
+        self.ctrl("break")
+        self.rig.post("/api/firmware/check")
+        self.rig.post("/api/firmware/install")
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error"), 60, "the broken write")
+        fu = st["firmware_update"]
+        self.assertEqual(fu["state"], "error")
+        self.assertIn("didn't finish", fu["error"])
+        self.assertTrue(fu["incomplete"])
+        good_backup = fu["backup"]["file"]
+        # Install again: no backup of the half-written board, straight to writing
+        self.rig.post("/api/firmware/install")
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error") and len(self.calls()) == 3,
+                           60, "the second write")
+        fu = st["firmware_update"]
+        self.assertEqual(fu["state"], "done", fu)
+        self.assertEqual([c[0] for c in self.calls()], ["r", "w", "w"])
+        self.assertFalse(fu["incomplete"])
+        self.assertEqual(fu["backup"]["file"], good_backup)               # the original is still the backup
+        with open(self.flash, "rb") as fh:
+            self.assertEqual(parse_hex(fh.read()), parse_hex(self.release_hex))
+
+
+class UnknownBoardFirmwareTests(FirmwareUpdateTests):
+    """The board's flash holds no Marlin firmware name (half-written, or something else entirely): it is
+    never saved as a backup, nothing is written, and the read is kept aside as bad-read-*.hex."""
     board_name = None
+
+    def test_check_install_and_restore(self):
+        self.rig.post("/api/firmware/check")
+        self.rig.post("/api/firmware/install")
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error"), 60, "the refusal")
+        fu = st["firmware_update"]
+        self.assertEqual(fu["state"], "error")
+        self.assertIn("isn't complete Marlin firmware", fu["error"])
+        self.assertIsNone(fu["backup"])
+        self.assertEqual([c[0] for c in self.calls()], ["r"])              # nothing written
+        fw_dir = os.path.join(self.rig.data, "firmware")
+        self.assertTrue(any(n.startswith("bad-read-") for n in os.listdir(fw_dir)))
+        self.rig.wait(lambda s: s["connection"]["ready"], 30, "reconnecting to the untouched board")
 
 
 class FirmwareAutoCheckTests(FirmwareUpdateTests):

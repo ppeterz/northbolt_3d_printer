@@ -361,14 +361,12 @@ class FirmwareTests(unittest.TestCase):
         self.assertEqual(check_hex(trimmed)["name"], "Marlin board")
         self.assertEqual(parse_hex(emit_hex(firmware)), firmware)      # emit and parse agree past 64 KB
 
-    def test_backups_need_a_program_not_a_name(self):
+    def test_backups_must_be_complete_marlin(self):
         from helpers import fake_firmware, make_hex
-        from northbolt.firmware import FirmwareError, check_backup, check_hex
-        stock = make_hex(b"\x0c\x94" * 35000)                  # a program without the Marlin name text
-        self.assertIsNone(check_backup(stock)["name"])
+        from northbolt.firmware import FirmwareError, check_backup
+        self.assertEqual(check_backup(fake_firmware("Marlin 1.1.9.9 (Github)"))["name"], "Marlin 1.1.9.9 (Github)")
         with self.assertRaises(FirmwareError):
-            check_hex(stock)                                     # still not accepted as new firmware
-        self.assertEqual(check_backup(fake_firmware("Marlin x"))["name"], "Marlin x")
+            check_backup(make_hex(b"\x0c\x94" * 35000))          # a program, but no name: e.g. half-written
         with self.assertRaises(FirmwareError):
             check_backup(make_hex(b"\x00\x11" * 35000))          # no AVR jump table: a bad read
         with self.assertRaises(FirmwareError):
