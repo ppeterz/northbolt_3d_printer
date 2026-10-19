@@ -455,6 +455,7 @@ class FirmwareUpdateTests(E2EBase):
     release_name = "Marlin 1.1.9.9 (Github)"
     release_tag = "fw-1.1.9.9-NB1"
     extra_fw = {"auto_check": False}
+    board_name = "Marlin 1.1.9.9 (Github) old"     # what the board runs before the update
 
     def setUp(self):
         import hashlib
@@ -466,7 +467,11 @@ class FirmwareUpdateTests(E2EBase):
         self.work = tempfile.mkdtemp(prefix="northbolt-fw-")
         self.release_hex = fake_firmware(self.release_name)
         self.flash = os.path.join(self.work, "board.hex")                      # the "board's" firmware
-        self.old_hex = fake_firmware("Marlin 1.1.9.9 (Github) old")
+        if self.board_name:
+            self.old_hex = fake_firmware(self.board_name)
+        else:   # like the original Skriware firmware: a real program, but no "FIRMWARE_NAME: ... SOURCE_CODE_URL"
+            from helpers import make_hex
+            self.old_hex = make_hex(b"\x0c\x94" * 35000)
         with open(self.flash, "wb") as fh:
             fh.write(self.old_hex)
         self.log = os.path.join(self.work, "avrdude.log")
@@ -570,6 +575,13 @@ class FirmwareUpdateTests(E2EBase):
         self.assertIn("printing", r["error"])
         self.rig.post("/api/job/cancel")
         self.rig.wait(lambda s: s["job"]["state"] == "cancelled", 40)
+
+
+class StockBoardFirmwareTests(FirmwareUpdateTests):
+    """The board runs the original Skriware firmware, which has no "FIRMWARE_NAME: ... SOURCE_CODE_URL"
+    text inside: backing it up must still work (it stopped the first update on the printer), and so must
+    restoring it."""
+    board_name = None
 
 
 class FirmwareAutoCheckTests(FirmwareUpdateTests):

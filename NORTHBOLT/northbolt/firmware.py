@@ -120,6 +120,24 @@ def app_only(data):
     return emit_hex({a: b for a, b in image.items() if a < end})
 
 
+def check_backup(data):
+    """Check a firmware read off the board (a backup) before relying on it. It has to be a real AVR
+    program that fits below the bootloader. Its name isn't required: whatever the board runs can be backed
+    up, and the original Skriware firmware doesn't carry the "FIRMWARE_NAME: ... SOURCE_CODE_URL" text
+    that check_hex() asks of new firmware. Returns facts about it (name None if it has none)."""
+    image = parse_hex(data)
+    top = max(image) + 1
+    if top > APP_LIMIT:
+        raise FirmwareError("The backup reaches into the bootloader area")
+    # an ATmega2560 program starts with its interrupt table: JMP instructions, 0x0C 0x94 each
+    if image.get(0) != 0x0C or image.get(1) != 0x94 or sum(1 for b in image.values() if b != 0xFF) < 4096:
+        raise FirmwareError("The firmware read from the board doesn't look like a program. "
+                            "Check the USB cable between the Pi and the printer board, then try again.")
+    blob = bytes(image.get(i, 0xFF) for i in range(top))
+    m = re.search(rb"FIRMWARE_NAME:([^\x00]*?) SOURCE_CODE_URL", blob)
+    return {"size": len(image), "end": top, "name": m.group(1).decode("ascii", "replace") if m else None}
+
+
 def check_hex(data):
     """Validate Intel HEX text for the ATmega2560. Returns facts about the image or raises."""
     image = parse_hex(data)
@@ -426,12 +444,12 @@ class FirmwareUpdater:
             else:
                 with open(os.path.join(self.dir, self.backup()["file"]), "rb") as fh:
                     data = app_only(fh.read())    # older backups may still hold the bootloader area
-                info = check_hex(data)
+                info = check_backup(data)
                 new_path = os.path.join(self.dir, "restore.hex")
                 with open(new_path, "wb") as fh:
                     fh.write(data)
                 label = "the backup"
-            self._set("working", phase="prepare", message=f"Installing {info['name']}")
+            self._set("working", phase="prepare", message=f"Installing {info['name'] or 'the previous firmware'}")
             if svc.link.ready:
                 for c in ("M104 T0 S0", "M104 T1 S0", "M140 S0"):
                     try:
@@ -448,7 +466,7 @@ class FirmwareUpdater:
                 # the read holds the whole flash, bootloader included: keep the firmware part only
                 with open(backup, "rb") as fh:
                     data = app_only(fh.read())
-                check_hex(data)                 # make sure the backup itself is usable
+                check_backup(data)              # a real program (any name, or none) that fits
                 with open(backup, "wb") as fh:
                     fh.write(data)
                 for old in sorted(glob.glob(os.path.join(self.dir, "backup-*.hex")))[:-3]:
@@ -460,14 +478,15 @@ class FirmwareUpdater:
             await asyncio.sleep(2.0)
             await svc.connect()
             fw = svc.firmware or ""
-            self.result = {"expected": info["name"], "reported": fw.replace("FIRMWARE_NAME:", "").split(" SOURCE_CODE_URL")[0]}
-            ok = info["name"] in fw
+            self.result = {"expected": info["name"] or "the previous firmware",
+                           "reported": fw.replace("FIRMWARE_NAME:", "").split(" SOURCE_CODE_URL")[0]}
+            ok = info["name"] is None or info["name"] in fw     # a nameless backup can't be compared
             if self.release:                 # after an update (or a restore) recompare with the release
                 try:
                     await self._compare(self.release)
                 except FirmwareError:
                     pass
-            self._set("done", message="Firmware updated." if ok else
+            self._set("done", message=("Firmware updated." if download else "Previous firmware restored.") if ok else
                       "Flashed, but the board reports a different firmware name. Check Settings → Connection.")
             log.info("Firmware now: %s", fw)
         except Exception as exc:
