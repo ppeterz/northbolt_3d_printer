@@ -333,11 +333,13 @@ class ApiTests(E2EBase):
         self.rig.post("/api/connection/estop")
         st = self.rig.wait(lambda s: s["connection"]["halted"], 10, "halted")
         self.assertTrue(self.rig.admin("state")["dead"])
+        self.assertIn("halted", [a["key"] for a in st["alerts"]])
         r = self.rig.post("/api/move", {"z": 5}, expect_ok=False)
         self.assertEqual(r["status"], 400)
         self.rig.post("/api/connection/reconnect")
         st = self.rig.wait(lambda s: s["connection"]["ready"] and not s["connection"]["halted"], 30, "reset")
         self.assertFalse(self.rig.admin("state")["dead"])
+        self.assertNotIn("halted", [a["key"] for a in st["alerts"]])     # the board was reset: the alert goes
 
     def test_touch_dead_zone_setting(self):
         self.assertIsNone(self.rig.state()["config"]["touch_dead_zone"])
@@ -539,6 +541,7 @@ class FirmwareUpdateTests(E2EBase):
         self.settings = {"firmware": {"github_repo": "https://github.com/ppeterz/SkriwareFirmware",
                                       "github_api": f"http://127.0.0.1:{port}",
                                       "avrdude": [sys.executable, os.path.join(here, "fake_avrdude.py")],
+                                      "settle_s": 0.2,
                                       **self.extra_fw}}
         # the simulator reports the firmware name found in the "board's" flash file
         self.env = {"FAKE_AVRDUDE_FLASH": self.flash, "FAKE_AVRDUDE_LOG": self.log, "SIM_FLASH_HEX": self.flash,
@@ -627,24 +630,76 @@ class FirmwareWriteSafetyTests(FirmwareUpdateTests):
         self.assertEqual(st["firmware_update"]["state"], "done", st["firmware_update"])
         self.assertEqual([c[0] for c in self.calls()], ["r", "w"])
 
-    def test_interrupted_write_then_install_again(self):
-        from northbolt.firmware import parse_hex
-        self.ctrl("break")
+    def install(self, calls):
         self.rig.post("/api/firmware/check")
         self.rig.post("/api/firmware/install")
-        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error"), 60, "the broken write")
-        fu = st["firmware_update"]
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error") and len(self.calls()) == calls,
+                           60, "the install to finish")
+        return st["firmware_update"]
+
+    def test_failed_write_is_written_again(self):
+        # what happened at 12:34: the read-back didn't match once. The second try is clean.
+        from northbolt.firmware import parse_hex
+        self.ctrl("mismatch")
+        fu = self.install(3)
+        self.assertEqual(fu["state"], "done", fu)
+        self.assertEqual([c[0] for c in self.calls()], ["r", "w", "w"])
+        self.assertFalse(fu["incomplete"])
+        with open(self.flash, "rb") as fh:
+            self.assertEqual(parse_hex(fh.read()), parse_hex(self.release_hex))
+
+    def test_no_sync_writes_nothing(self):
+        # avrdude can't reach the bootloader: the board is untouched, so no "didn't finish" alarm
+        self.ctrl("nosync-always")
+        fu = self.install(4)
+        self.assertEqual(fu["state"], "error")
+        self.assertEqual([c[0] for c in self.calls()], ["r", "w", "w", "w"])   # three tries
+        self.assertIn("timeout communicating", fu["error"])                     # avrdude's own words
+        self.assertIn("Nothing was written", fu["error"])
+        self.assertFalse(fu["incomplete"])
+        self.rig.wait(lambda s: s["connection"]["ready"], 30, "reconnecting to the untouched board")
+
+    def test_board_written_by_hand_clears_the_warning(self):
+        # the board was fixed with avrdude over SSH (NORTHBOLT stopped), but the marker is still there
+        with open(os.path.join(self.rig.data, "firmware", "write-unfinished"), "w") as fh:
+            fh.write("2026-10-19 12:34:00 writing fw-1.1.9.9-NB1\n")
+        self.assertTrue(self.rig.state()["firmware_update"]["incomplete"])
+        self.rig.post("/api/connection/reconnect")              # the board answers with its firmware name
+        st = self.rig.wait(lambda s: not s["firmware_update"]["incomplete"], 30, "the warning to clear")
+        self.assertTrue(st["connection"]["ready"])
+        # an install error stays on the Updates tab until it is closed
+        self.ctrl("nosync-always")
+        fu = self.install(4)
+        self.assertEqual(fu["state"], "error")
+        self.rig.post("/api/firmware/dismiss")
+        fu = self.rig.state()["firmware_update"]
+        self.assertEqual((fu["state"], fu["error"]), ("ready", None))
+
+    def test_interrupted_write_then_install_again(self):
+        from northbolt.firmware import parse_hex
+        self.ctrl("break-always")
+        fu = self.install(4)
         self.assertEqual(fu["state"], "error")
         self.assertIn("didn't finish", fu["error"])
         self.assertTrue(fu["incomplete"])
         good_backup = fu["backup"]["file"]
-        # Install again: no backup of the half-written board, straight to writing
+        # The port is still disturbed: a try that can't even start must not hide the half-written board
+        os.unlink(os.path.join(self.work, "break-always"))
+        self.ctrl("nosync-always")
         self.rig.post("/api/firmware/install")
-        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error") and len(self.calls()) == 3,
-                           60, "the second write")
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error") and len(self.calls()) == 7,
+                           60, "the tries that can't start")
+        self.assertEqual(st["firmware_update"]["state"], "error")
+        self.assertTrue(st["firmware_update"]["incomplete"])
+        self.assertNotIn("Nothing was written", st["firmware_update"]["error"])
+        # Install again: no backup of the half-written board, straight to writing
+        os.unlink(os.path.join(self.work, "nosync-always"))
+        self.rig.post("/api/firmware/install")
+        st = self.rig.wait(lambda s: s["firmware_update"]["state"] in ("done", "error") and len(self.calls()) == 8,
+                           60, "the last write")
         fu = st["firmware_update"]
         self.assertEqual(fu["state"], "done", fu)
-        self.assertEqual([c[0] for c in self.calls()], ["r", "w", "w"])
+        self.assertEqual([c[0] for c in self.calls()], ["r"] + ["w"] * 7)
         self.assertFalse(fu["incomplete"])
         self.assertEqual(fu["backup"]["file"], good_backup)               # the original is still the backup
         with open(self.flash, "rb") as fh:

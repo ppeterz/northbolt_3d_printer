@@ -312,7 +312,8 @@ button.stat { width: 100%; text-align: left; font: inherit; color: inherit; }
 .banner.warning { border-color: rgba(255, 171, 46, .35); background: linear-gradient(90deg, rgba(255, 171, 46, .12), rgba(255, 171, 46, .04)); }
 .banner.error { border-color: rgba(255, 77, 79, .4); background: linear-gradient(90deg, rgba(255, 77, 79, .14), rgba(255, 77, 79, .04)); }
 .banner.info { border-color: rgba(47, 140, 255, .35); background: linear-gradient(90deg, rgba(47, 140, 255, .12), rgba(47, 140, 255, .03)); }
-.banner .text { flex: 1; }
+.banner .text { flex: 1; min-width: 0; overflow-wrap: anywhere; max-height: 7.5em; overflow: hidden; }
+.banner > .btn, .banner .x { flex: none; }
 .banner .x { border: 0; background: none; font-size: calc(22px * var(--ts)); color: var(--muted); width: calc(40px * var(--u)); height: calc(40px * var(--u)); cursor: pointer; }
 
 /* ---------- files: thumbnail grid ---------- */

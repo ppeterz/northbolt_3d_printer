@@ -1078,7 +1078,10 @@ function renderFirmware() {
   }
   const st = $('#fw-status');
   st.innerHTML = fu.state === 'checking' ? `<div class="banner info"><div class="spinner"></div><div class="text">${esc(fu.message)}</div></div>`
-    : (fu.state === 'error' && fu.error ? `<div class="banner error"><div class="text">${esc(fu.error)}</div></div>` : '');
+    : (fu.state === 'error' && fu.error ? `<div class="banner error"><div class="text">${esc(fu.error)}</div>
+      <button class="x" id="fw-dismiss" aria-label="Close">×</button></div>` : '');
+  const x = $('#fw-dismiss', st);
+  if (x) x.onclick = () => act(null, () => post('/api/firmware/dismiss'));
 }
 
 // ------------------------------------------------------------------ "update available" prompt

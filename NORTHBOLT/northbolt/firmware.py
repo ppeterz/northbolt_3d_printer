@@ -32,6 +32,10 @@ class FirmwareError(RuntimeError):
     pass
 
 
+class AvrdudeError(FirmwareError):
+    wrote = False        # True once avrdude started rewriting pages: the board's firmware has changed
+
+
 def parse_repo(text):
     """'owner/repo', 'https://github.com/owner/repo(.git)' or 'github.com/owner/repo' -> 'owner/repo'."""
     t = (text or "").strip()
@@ -171,6 +175,12 @@ class FirmwareUpdater:
         self.last_check = None
         self.snoozed_until = 0.0
         self._name_cache = {}
+        self._failed_here = False  # a write in this run left the marker (see board_answered)
+
+    @property
+    def settle_s(self):
+        """Pause before each avrdude run, so the board has finished restarting from the last one."""
+        return float(self.svc.settings["firmware"].get("settle_s", 4.0))
 
     @property
     def busy(self):
@@ -190,6 +200,24 @@ class FirmwareUpdater:
     @property
     def incomplete(self):
         return os.path.exists(self.marker)
+
+    def board_answered(self):
+        """The board reported its firmware name (M115), so it runs complete firmware. A marker left
+        before NORTHBOLT started is stale: the board was written by hand (avrdude needs NORTHBOLT
+        stopped). A marker from a write that failed in this run stays: that board may run, but
+        its flash didn't verify, so it still needs writing again."""
+        if self.state == "working" or self._failed_here or not self.incomplete:
+            return
+        os.unlink(self.marker)
+        log.info("The printer board answers with its firmware: the unfinished-write warning is cleared")
+        self.dismiss()
+
+    def dismiss(self):
+        """Close the last install's error (the Updates tab keeps showing it until then)."""
+        if self.state == "error":
+            self.error = None
+            self.state = "ready" if self.release else "idle"
+        self.svc.notify("firmware")
 
     def backup(self):
         files = sorted(glob.glob(os.path.join(self.dir, "backup-*.hex")))
@@ -439,10 +467,36 @@ class FirmwareUpdater:
                     hashes += 1
                     self._set(phase=phase_names[phase_i], progress=min(100, hashes * 2))
         rc = await proc.wait()
+        text = out.decode("ascii", "replace")
         if rc != 0:
-            tail = out.decode("ascii", "replace").strip().splitlines()[-3:]
-            raise FirmwareError("avrdude failed: " + " / ".join(t.strip() for t in tail))
-        return out.decode("ascii", "replace")
+            # the whole output goes to the log: the last lines alone ("verification mismatch") hide where
+            log.warning("avrdude %s failed (exit %s):\n%s", op, rc, text.strip())
+            lines = [t.strip() for t in text.strip().splitlines() if t.strip() and "Thank you" not in t]
+            err = AvrdudeError("avrdude failed: " + " / ".join(lines[-3:]))
+            # "Writing |" with progress means pages were erased and rewritten: the board's firmware changed
+            err.wrote = op == "w" and "Writing |" in text and "#" in text.split("Writing |", 1)[1][:200]
+            raise err
+        return text
+
+    async def _write(self, path, label):
+        """Write a firmware and verify it, retrying a failed write: every write erases and rewrites
+        each page, so a fresh attempt leaves a clean result, and the bootloader can't be damaged."""
+        attempts = max(1, int(self.svc.settings["firmware"].get("write_attempts", 3)))
+        wrote = False
+        for n in range(1, attempts + 1):
+            if n > 1:
+                self._set(phase="write", progress=0,
+                          message=f"Writing {label} again (try {n} of {attempts}). Don't turn the printer off.")
+                await asyncio.sleep(self.settle_s)
+            try:
+                await self._avrdude("w", path, ["write", "verify"])
+                return
+            except AvrdudeError as exc:
+                wrote = wrote or exc.wrote
+                if n == attempts:
+                    exc.wrote = wrote
+                    raise
+                log.warning("Firmware write try %d of %d failed: %s", n, attempts, exc)
 
     async def _run(self, download):
         svc = self.svc
@@ -475,7 +529,7 @@ class FirmwareUpdater:
                     except Exception:
                         pass
             await svc.disconnect()              # frees the port and stops auto-reconnect
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(self.settle_s)
             if download and self.incomplete:
                 # the last write didn't finish: the board holds half-written firmware, nothing worth backing
                 # up, and reading it would only fail. Write again; the last good backup is kept.
@@ -498,12 +552,17 @@ class FirmwareUpdater:
                 os.unlink(reading)
                 for old in sorted(glob.glob(os.path.join(self.dir, "backup-*.hex")))[:-3]:
                     os.unlink(old)
+                # Let the board finish restarting after the long read before avrdude resets it again:
+                # back to back, the writes on the printer failed (verification mismatch, scrambled pages).
+                await asyncio.sleep(self.settle_s)
             self._set(phase="write", progress=0, message=f"Writing {label} to the printer board. Don't turn it off.")
             flashed = True
+            was_incomplete = self.incomplete    # half-written before this run: stays so if nothing gets written
             with open(self.marker, "w") as fh:
                 fh.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} writing {label}\n")
-            await self._avrdude("w", new_path, ["write", "verify"])
+            await self._write(new_path, label)
             os.unlink(self.marker)              # written and verified
+            self._failed_here = False
             self._set(phase="reconnect", progress=None, message="Reconnecting")
             await asyncio.sleep(2.0)
             await svc.connect()
@@ -522,7 +581,12 @@ class FirmwareUpdater:
         except Exception as exc:
             log.exception("Firmware update failed")
             self.error = str(exc)
-            if flashed:
+            if flashed and isinstance(exc, AvrdudeError) and not exc.wrote and not was_incomplete:
+                if os.path.exists(self.marker):
+                    os.unlink(self.marker)      # avrdude never got to rewrite a page: the board is unchanged
+                self.error += " Nothing was written: the printer board still has its firmware."
+            elif flashed:
+                self._failed_here = True
                 self.error += (" The write didn't finish, so the printer board won't work until it's written again. "
                                "The bootloader is untouched: press Install to write it again, or Restore backup.")
             self._set("error", message="")

@@ -43,13 +43,34 @@ if mode == "r":
     with open(path, "wb") as fh:
         fh.write(emit_hex(image))
 elif mode == "w":
-    # control files in $FAKE_AVRDUDE_CTRL: "slow" makes the write take 4 s; "break" (used up once) stops it
-    # halfway like a disturbed port does: the start of the new firmware, then scrambled pages, no name.
+    # Control files in $FAKE_AVRDUDE_CTRL. "slow": the write takes 4 s. The others happen once (the file is
+    # used up) or, named NAME-always, every time: "nosync" fails before touching the flash, "mismatch"
+    # writes but the read-back differs, "break" stops halfway like a disturbed port does (the start of the
+    # new firmware, then scrambled pages, no name).
     ctrl = os.environ.get("FAKE_AVRDUDE_CTRL", "")
+
+    def switch(name):
+        if not ctrl:
+            return False
+        if os.path.exists(os.path.join(ctrl, name + "-always")):
+            return True
+        if os.path.exists(os.path.join(ctrl, name)):
+            os.unlink(os.path.join(ctrl, name))
+            return True
+        return False
+
     if ctrl and os.path.exists(os.path.join(ctrl, "slow")):
         time.sleep(4.0)
-    if ctrl and os.path.exists(os.path.join(ctrl, "break")):
-        os.unlink(os.path.join(ctrl, "break"))
+    if switch("nosync"):
+        sys.stderr.write("avrdude: stk500v2_getsync(): timeout communicating with programmer\n")
+        sys.exit(1)
+    if switch("mismatch"):
+        bar("Writing")
+        shutil.copyfile(path, flash)
+        bar("Reading")
+        sys.stderr.write("avrdude error: verification mismatch\n        device 0x3f != input 0xff at addr 0x1f000\n")
+        sys.exit(1)
+    if switch("break"):
         with open(path, "rb") as fh:
             new = parse_hex(fh.read())
         half = {a: b for a, b in new.items() if a < 4096}

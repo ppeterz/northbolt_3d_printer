@@ -28,6 +28,18 @@ GCODE_EXT = (".gcode", ".gco", ".g")
 SAFE_NAME = re.compile(r"[^\w\-. ()+]")
 
 
+def readable(text, limit=160):
+    """A firmware message fit for the screen. Noise on the serial line (a board resetting, a wrong
+    baud rate) arrives as unreadable bytes: say so instead of showing them."""
+    text = "".join(ch for ch in text if ch.isprintable())
+    if not text:
+        return text
+    odd = sum(1 for ch in text if ch == "�" or not ch.isascii())
+    if odd > len(text) * 0.2:
+        return "unreadable data from the printer board (serial noise)"
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
 def safe_filename(name):
     name = os.path.basename((name or "").replace("\\", "/")).strip()
     name = SAFE_NAME.sub("_", name)
@@ -148,6 +160,9 @@ class PrinterService:
         self.stopped = False
         await self.link.connect(self.settings["serial_port"], self.settings["baudrate"])
         self.connection_error = None
+        # opening the port resets the board: a halt or stop from before is over
+        self._last_error_line = None
+        self.alerts = [a for a in self.alerts if a.get("key") not in ("halted", "stopped")]
         self.tool = 0
         self.homed = False
         await self.link.command("M155 S2")
@@ -155,6 +170,8 @@ class PrinterService:
         for line in resp:
             if "FIRMWARE_NAME" in line:
                 self.firmware = line
+                if self.fw:
+                    self.fw.board_answered()
         try:
             await self.read_offsets()
         except Exception as exc:
@@ -216,7 +233,7 @@ class PrinterService:
             self.alert("warning", "The bed mesh has a bad point. Run bed leveling (G29) again.", key="mesh")
 
     def _on_error(self, line):
-        text = line.split(":", 1)[1].strip() if ":" in line else line
+        text = readable(line.split(":", 1)[1].strip() if ":" in line else line)
         low = text.lower()
         if "calibration data corrupted" in low:
             self.alert("warning", "The saved bed mesh is corrupted. Run bed leveling (G29) again.", key="mesh")

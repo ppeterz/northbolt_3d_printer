@@ -545,6 +545,8 @@ def make_app(svc):
             svc.fw.skip()
         elif action == "snooze":
             svc.fw.snooze(float((await body(request)).get("hours", 24)))
+        elif action == "dismiss":
+            svc.fw.dismiss()
         else:
             raise web.HTTPNotFound()
         return ok(svc.fw.snapshot())

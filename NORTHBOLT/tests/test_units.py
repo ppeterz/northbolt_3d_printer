@@ -417,6 +417,16 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(merged["pause"]["retract"], DEFAULTS["pause"]["retract"])
 
 
+class ReadableTests(unittest.TestCase):
+    def test_serial_noise_is_named_not_shown(self):
+        from northbolt.printer import readable
+        self.assertEqual(readable("Heating failed, system stopped! Heater_ID: 0"),
+                         "Heating failed, system stopped! Heater_ID: 0")
+        noise = "~����T2��_f]�g���3\x07��!���k" * 20
+        self.assertEqual(readable(noise), "unreadable data from the printer board (serial noise)")
+        self.assertEqual(len(readable("x" * 500)), 160)
+
+
 class StartTempsTests(unittest.TestCase):
     def scan(self, text):
         from northbolt.gcode import start_temps

@@ -104,6 +104,8 @@ DEFAULTS = {
         "github_api": "https://api.github.com",
         "avrdude": ["avrdude"],
         "programmer": "wiring",     # the MKS Gen 1.3 stk500v2 bootloader
+        "settle_s": 4.0,            # pause before each avrdude run: back to back, writes failed on the printer
+        "write_attempts": 3,        # a write that doesn't verify is written again (safe: pages are re-erased)
         "baud": 115200,
         "auto_check": True,         # look for a new release by itself and offer it on the screen
         "check_hours": 6,

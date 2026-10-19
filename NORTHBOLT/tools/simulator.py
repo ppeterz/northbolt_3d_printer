@@ -33,6 +33,18 @@ PLANNER = 16
 
 def firmware_name_from_hex(path):
     """The FIRMWARE_NAME inside an Intel HEX file: lets tests 'flash' the simulated board."""
+    blob = _flash_blob(path)
+    m = re.search(rb"FIRMWARE_NAME:([^\x00]*?) SOURCE_CODE_URL", blob or b"")
+    return m.group(1).decode() if m else None
+
+
+def flash_scrambled(path):
+    """A half-written flash (the tests' broken write leaves pages of zeros): the board never starts."""
+    blob = _flash_blob(path)
+    return bool(blob) and bytes(4096) in blob
+
+
+def _flash_blob(path):
     if not path or not os.path.exists(path):
         return None
     image, base = {}, 0
@@ -54,9 +66,7 @@ def firmware_name_from_hex(path):
                 break
     if not image:
         return None
-    blob = bytes(image.get(i, 0xFF) for i in range(max(image) + 1))
-    m = re.search(rb"FIRMWARE_NAME:([^\x00]*?) SOURCE_CODE_URL", blob)
-    return m.group(1).decode() if m else None
+    return bytes(image.get(i, 0xFF) for i in range(max(image) + 1))
 
 
 def checksum(text):
@@ -529,6 +539,7 @@ class Simulator:
             fw.head = old.head
             fw.pos["Z"] = old.head - fw.zprobe
         fw.writer = writer
+        fw.dead = flash_scrambled(os.environ.get("SIM_FLASH_HEX"))   # silent, like a half-written board
         self.tasks = [asyncio.ensure_future(self.worker(fw)), asyncio.ensure_future(fw.physics())]
         fw.out("start")
         fw.out("echo:Marlin 1.1.9.9")
