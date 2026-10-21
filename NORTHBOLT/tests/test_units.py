@@ -168,16 +168,22 @@ class RecoveryTests(unittest.TestCase):
 
     def test_resume_commands(self):
         s = PrintState(x=10, y=20, z=3.2, e=55.5, f=1800, tool=1, fan=255, t0=0, t1=210, bed=60)
-        settings = {"recovery": DEFAULTS["recovery"], "z_max": 210, "lift_mechanism": True}
-        cmds = resume_commands(s, settings, {"e0": 0.4, "e1": 0.9})
-        self.assertIn("G92 Z2.7", cmds)               # 3.2 - (0.9 - 0.4)
-        self.assertIn("G28 X Y", cmds)
-        self.assertNotIn("G28", cmds)
-        self.assertLess(cmds.index("M190 S60"), cmds.index("G92 Z2.7"))
-        self.assertLess(cmds.index("G28 X Y"), cmds.index("T1"))
-        self.assertEqual(cmds[-3:], ["G92 E55.5", "M106 S255", "G1 F1800"])
+        settings = {"recovery": DEFAULTS["recovery"], "pause": DEFAULTS["pause"], "z_max": 210,
+                    "lift_mechanism": True}
+        park, back = resume_commands(s, settings, {"e0": 0.4, "e1": 0.9})
+        self.assertIn("G92 Z2.7", park)               # 3.2 - (0.9 - 0.4)
+        self.assertIn("G28 X Y", park)
+        self.assertNotIn("G28", park + back)
+        self.assertLess(park.index("M190 S60"), park.index("G92 Z2.7"))
+        # over the part the nozzle only softens (no ooze); full heat once parked off the print
+        self.assertLess(park.index("M109 T1 S150"), park.index("G1 Z10 F300"))
+        self.assertLess(park.index("G1 X10 Y265 F3000"), park.index("M109 T1 S210"))
+        self.assertNotIn("M104 T1 S210", park[:park.index("G1 X10 Y265 F3000")])
+        self.assertLess(park.index("G28 X Y"), park.index("T1"))
+        self.assertEqual(back[:2], ["G1 X10 Y20 F3000", "G1 Z3.2 F300"])   # back over the part after cleaning
+        self.assertEqual(back[-3:], ["G92 E55.5", "M106 S255", "G1 F1800"])
         s.tool = 0
-        self.assertIn("G92 Z3.2", resume_commands(s, settings, {"e0": 0.4, "e1": 0.9}))
+        self.assertIn("G92 Z3.2", resume_commands(s, settings, {"e0": 0.4, "e1": 0.9})[0])
 
 
 class WifiTests(unittest.TestCase):

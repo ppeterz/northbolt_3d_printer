@@ -234,6 +234,13 @@ class PowerLossTests(E2EBase):
         self.assertEqual(st["recovery"]["file"], "part.gcode")
         self.assertEqual(st["recovery"]["tool"], tool)
         self.rig.post("/api/recovery/resume")
+        # It waits at the park point, hot, for the nozzle to be wiped: the bed has dropped away
+        st = self.rig.wait(lambda s: s["job"]["state"] == "paused", 60, "the wait for cleaning")
+        self.assertIn("wipe off", st["job"]["pause_reason"])
+        parked = self.rig.admin("state")
+        self.assertEqual((parked["pos"]["X"], parked["pos"]["Y"]), (10.0, 265.0))
+        self.assertGreater(parked["nozzle"] - lost_at["nozzle"], 9.0)   # 10 mm, less the right nozzle's offset after T1
+        self.rig.post("/api/job/resume")
         self.rig.wait(lambda s: s["job"]["state"] == "printing", 60, "resumed printing")
         time.sleep(0.5)
         after = self.rig.admin("state")

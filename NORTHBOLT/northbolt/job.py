@@ -175,8 +175,16 @@ class JobRunner:
         try:
             if plan:
                 log.info("Resuming %s at line %d", self.file, plan.line_index)
-                await self._send_all(resume_commands(plan.state, self.svc.settings, self.svc.offsets,
-                                                     plan.head_z, plan.head_tool))
+                park, back = resume_commands(plan.state, self.svc.settings, self.svc.offsets,
+                                             plan.head_z, plan.head_tool)
+                self.message = "Freeing the nozzle, then heating at the back corner"
+                await self._send_all(park)
+                self.message = None
+                if self.svc.settings["recovery"].get("clean_pause", True) and not (self._cancel or self.error):
+                    await self._wait_for_clean(plan.state)
+                if self._cancel or self.error:
+                    return
+                await self._send_all(back)
                 self._set_state("printing")
             elif self.svc.settings["start"].get("heat_at_park", True):
                 await self._heat_at_park()
@@ -359,6 +367,32 @@ class JobRunner:
         self._pause_req = None
         self.pause_reason = None
         self._set_state("printing")
+
+    async def _wait_for_clean(self, st):
+        """After a power cut: the head is parked off the print, hot and primed. Whatever oozed or froze
+        onto the nozzle would go onto the part, so wait until someone has wiped it."""
+        self._streaming = False
+        self.pause_reason = ("Power is back. The nozzle is at the back left corner: wipe off any "
+                             "filament on it, then press Resume to continue the print")
+        self._resume_evt = asyncio.Event()
+        self._set_state("paused")
+        timeout = self.svc.settings["pause"].get("heater_timeout_min") or 0
+        if timeout > 0:
+            self._timeout_task = asyncio.ensure_future(self._heater_timeout(timeout * 60))
+        await self._resume_evt.wait()
+        if self._timeout_task:
+            self._timeout_task.cancel()
+            self._timeout_task = None
+        self.pause_reason = None
+        if self._cancel or self.error:
+            return
+        self._set_state("resuming")
+        if self.heaters_off_for_pause:     # waited too long: heat again, still at the park point
+            self.heaters_off_for_pause = False
+            cmds = [f"M104 T{t} S{fmt(temp)}" for t, temp in ((0, st.t0), (1, st.t1)) if temp > 0]
+            if st.target(st.tool) > 0:
+                cmds.append(f"M109 T{st.tool} S{fmt(st.target(st.tool))}")
+            await self._send_all(cmds)
 
     async def _heater_timeout(self, seconds):
         try:

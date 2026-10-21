@@ -1488,7 +1488,7 @@ function recoveryDialog() {
   modal({
     title: 'Resume the interrupted print?',
     body: `<p><b>${esc(r.file)}</b> stopped at layer ${r.layer ?? '?'} (${fmtZ(r.z)}).</p>
-      <p class="muted">The printer will heat up, set Z without homing it, home X and Y, then carry on from just before where it stopped.</p>
+      <p class="muted">The printer heats the bed, warms the nozzle just enough to free it, drops the bed away from the part and moves the head to the back left corner. It heats up fully there and waits for you to wipe the nozzle, then carries on from just before where it stopped.</p>
       <ul class="checklist"><li>Check the part is still stuck firmly to the bed.</li>
       <li>Make sure nothing is under or around the nozzle.</li>${toolNote}
       <li>Expect a small seam where it resumes.</li></ul>`,
@@ -1894,7 +1894,10 @@ const FORMS = {
       tog('recovery.layer_sync', 'Sync at layer changes', 'Waits for each layer to finish so the checkpoint is exact'),
       tog('recovery.sync_z_moves', 'Sync before Z moves', 'Needed to know the nozzle height after a power cut. Adds a short stop at each Z-hop.'),
       num('recovery.progress_interval_s', 'Save progress every', 's', 1, 30, 1),
-      num('recovery.z_lift', 'Lift before homing X/Y', 'mm', 1, 20, 1), num('recovery.prime_length', 'Prime before resuming', 'mm', 0, 30, 1),
+      num('recovery.z_lift', 'Drop the bed before moving off the part', 'mm', 1, 20, 1),
+      num('recovery.soften_temp', 'Warm the nozzle over the part to', '°C', 100, 200, 5, 'Frees it from the plastic without oozing. It heats fully only once it is off the print.'),
+      tog('recovery.clean_pause', 'Wait for the nozzle to be wiped', 'Stops at the back left corner, hot, until you press Resume'),
+      num('recovery.prime_length', 'Prime before resuming', 'mm', 0, 30, 1),
       tog('recovery.use_mesh', 'Turn bed leveling back on after homing')] },
   ],
   leds: [
@@ -1974,7 +1977,7 @@ function buildTab(tab) {
   if (FORMS[tab]) buildForm(box, FORMS[tab]);
   if (tab === 'general') box.appendChild(presetsCard());
   if (tab === 'recovery') {
-    box.appendChild(el(`<div class="card muted" style="font-size:calc(14px * var(--ts))">After a power cut the printer is reheated, Z is set to where the nozzle stopped (it is never homed into the part), X and Y are homed, and printing continues from just before the last confirmed move. The lead screws hold Z while the power is off.</div>`));
+    box.appendChild(el(`<div class="card muted" style="font-size:calc(14px * var(--ts))">After a power cut, Z is set to where the nozzle stopped (it is never homed into the part; the lead screws hold Z while the power is off). The bed heats first, the nozzle warms just enough to come free, the bed drops away and the head goes to the back left corner. It heats fully there, primes, and waits for you to wipe the nozzle; Resume then prints on from just before the last confirmed move.</div>`));
   }
   if (tab === 'scales') box.appendChild(scalesCard());
   if (tab === 'leds') box.appendChild(ledsCard());

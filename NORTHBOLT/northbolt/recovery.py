@@ -175,7 +175,14 @@ def fmt(v):
 
 
 def resume_commands(state, settings, offsets, head_z=None, head_tool=None):
-    """G-code that brings a cold, unhomed printer back to `state` without homing Z.
+    """G-code that brings a cold, unhomed printer back to `state` without homing Z, in two parts:
+    (park, back). `park` frees the nozzle from the part, moves the head to the park point (back
+    left, off the print) and heats and primes it there; the screen then asks to clean the nozzle.
+    `back` returns to the part and continues.
+
+    The nozzle is never heated to printing temperature over the part: it would ooze a blob onto it
+    while it heats. It only warms to recovery.soften_temp (soft enough to come away from the plastic
+    it froze into, too cool to run) before the bed drops away.
 
     head_z/head_tool: where the head physically stopped (logical Z for that tool). Defaults to
     the state's own Z and tool.
@@ -184,21 +191,15 @@ def resume_commands(state, settings, offsets, head_z=None, head_tool=None):
     head_z = state.z if head_z is None else head_z
     head_tool = state.tool if head_tool is None else head_tool
     rec = settings["recovery"]
+    p = settings.get("pause") or {}
     z_max = settings["z_max"]
     tool = state.tool
     cmds = []
-    if state.bed > 0:
-        cmds.append(f"M140 S{fmt(state.bed)}")
-    for t, temp in ((0, state.t0), (1, state.t1)):
-        if temp > 0:
-            cmds.append(f"M104 T{t} S{fmt(temp)}")
-    if state.bed > 0:
-        cmds.append(f"M190 S{fmt(state.bed)}")
-    if state.target(tool) > 0:
-        cmds.append(f"M109 T{tool} S{fmt(state.target(tool))}")
-    for t, temp in ((0, state.t0), (1, state.t1)):
-        if temp > 0 and t != tool:
-            cmds.append(f"M109 T{t} S{fmt(temp)}")
+    if state.bed > 0:                   # the bed first, while the nozzle stays cold
+        cmds += [f"M140 S{fmt(state.bed)}", f"M190 S{fmt(state.bed)}"]
+    soften = min(state.target(head_tool), float(rec.get("soften_temp", 150)))
+    if soften > 0:
+        cmds.append(f"M109 T{head_tool} S{fmt(soften)}")
 
     # Z is still where the print stopped (lead screws hold it). Tell the firmware, don't home it.
     # With T1 active the firmware's Z includes the E1-E0 offset difference; we boot on T0.
@@ -216,13 +217,24 @@ def resume_commands(state, settings, offsets, head_z=None, head_tool=None):
     ]
     if rec.get("use_mesh", True):
         cmds.append("M420 S1")          # G28 turns bed leveling off in this firmware
+    if p.get("park_x") is not None and p.get("park_y") is not None:
+        cmds.append(f"G1 X{fmt(p['park_x'])} Y{fmt(p['park_y'])} F3000")
+    for t, temp in ((0, state.t0), (1, state.t1)):
+        if temp > 0:
+            cmds.append(f"M104 T{t} S{fmt(temp)}")
+    if state.target(tool) > 0:
+        cmds.append(f"M109 T{tool} S{fmt(state.target(tool))}")
+    for t, temp in ((0, state.t0), (1, state.t1)):
+        if temp > 0 and t != tool:
+            cmds.append(f"M109 T{t} S{fmt(temp)}")
     if tool == 1:
         cmds.append("T1")
     prime = rec["prime_length"]
     cmds += ["M83"]
     if prime > 0:
         cmds += [f"G1 E{fmt(prime)} F200", "G1 E-1 F1800"]
-    cmds += [
+    park = cmds
+    cmds = [
         f"G1 X{fmt(state.x)} Y{fmt(state.y)} F3000",
         f"G1 Z{fmt(state.z)} F300",
     ]
@@ -236,4 +248,4 @@ def resume_commands(state, settings, offsets, head_z=None, head_tool=None):
         cmds.append(f"G1 F{fmt(state.f)}")
     if state.rel_xyz:
         cmds.append("G91")
-    return cmds
+    return park, cmds

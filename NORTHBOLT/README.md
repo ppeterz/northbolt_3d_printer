@@ -263,10 +263,13 @@ All saves are atomic (write, flush, rename), so a power cut never leaves a half-
 
 After a power cut, the UI offers to resume. The sequence:
 
-1. Heat the bed and nozzles.
+1. Heat the bed. The nozzle only warms to 150 °C (`recovery.soften_temp`), enough to free it from the
+   plastic it froze into without oozing onto the part.
 2. Set Z to the saved head height with `G92` (never home Z, because the probe sits under the part).
-3. Lift, home X and Y, re-enable the bed mesh, select the tool, and prime.
-4. Return to the resume point and continue.
+3. Drop the bed 10 mm (`recovery.z_lift`), home X and Y, re-enable the bed mesh, and park at the back left.
+4. Heat the nozzles fully there, select the tool, and prime.
+5. Wait, hot, for you to wipe the nozzle and press Resume (`recovery.clean_pause`).
+6. Return to the resume point and continue.
 
 The resume point is the last safe line, at most 26 moves before the last acknowledged one. Expect a small seam
 and a few millimetres printed twice.

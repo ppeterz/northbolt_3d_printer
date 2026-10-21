@@ -58,7 +58,9 @@ DEFAULTS = {
         "progress_interval_s": 2,
         "sync_z_moves": True,    # M400 + save before each Z move / tool change so head height is known
         "backoff_moves": 26,     # BUFSIZE 10 + BLOCK_BUFFER_SIZE 16
-        "z_lift": 5.0,
+        "z_lift": 10.0,          # mm the bed drops away from the part before the head moves off it
+        "soften_temp": 150,      # the nozzle warms to this over the part (frees it, hardly oozes)
+        "clean_pause": True,     # wait at the park point for the nozzle to be wiped, then Resume
         "prime_length": 5.0,
         "use_mesh": True,        # send M420 S1 after homing X/Y (G28 turns leveling off)
     },
