@@ -760,6 +760,7 @@ class PrinterService:
             out.append({
                 "name": name, "size": st.st_size, "date": st.st_mtime,
                 "est_time_s": meta.get("est_time_s"), "filament_g": meta.get("filament_g"),
+                "filament_g_tools": meta.get("filament_g_tools"),   # per nozzle, two-colour files
                 "filament_mm": meta.get("filament_mm"), "layers": meta.get("layers"),
                 "max_z": meta.get("max_z"), "tools": meta.get("tools"),
                 "has_thumbnail": bool(meta.get("thumbnail")), "scanning": name in self.scanning,

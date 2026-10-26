@@ -237,7 +237,8 @@ and the API key from **Settings → System**. "Upload and print" then starts the
 ### Two-colour printing (PrusaSlicer)
 
 `slicer/PrusaSlicer-Skriware2-NORTHBOLT.ini` holds two printers, PLA and PETG, and 0.2 mm print settings.
-It needs PrusaSlicer 2.6 or newer. Import it with **File → Import → Import Config Bundle**.
+It was made and test-sliced with PrusaSlicer 2.9. Import it with **File → Import → Import Config Bundle**.
+`tests/fixtures/prusaslicer-two-colours.gcode` is a file sliced with it, and the end-to-end tests print it.
 
 - **Skriware 2 - two colours (NORTHBOLT)**: two nozzles. Extruder 1 is the left nozzle (T0) and extruder 2 the right one (T1).
 - **Skriware 2 - left nozzle (NORTHBOLT)**: one colour, with the full 200 mm bed width.
@@ -247,8 +248,11 @@ To print in two colours:
 1. Select the two-colour printer, and pick a filament for each extruder on the right-hand side.
 2. Give parts of the model to extruder 2. Either right-click a part and choose **Extruder 2**, or paint
    areas with the **Multimaterial painting** tool (shortcut N).
-3. Slice. The wipe tower at the back right cleans each nozzle after a swap. Each nozzle heats only if the print uses it.
-4. Upload it to NORTHBOLT. **File info** lists both nozzles and the grams of filament for each. **Print** warns
+3. Put the wipe tower on the bed: press **A** (Arrange), or drag it. It cleans each nozzle after a swap.
+   PrusaSlicer 2.9 keeps its position with the project, not in the profile, and a new project may place it past
+   the 179 mm edge, where slicing stops with an error.
+4. Slice. Each nozzle heats only if the print uses it.
+5. Upload it to NORTHBOLT. **File info** lists both nozzles and the grams of filament for each. **Print** warns
    if a nozzle the file uses has no filament in its sensor.
 
 How it fits this printer:
@@ -256,6 +260,9 @@ How it fits this printer:
 - **The firmware does the whole swap** on `T0`/`T1`. It lifts Z 3 mm, lowers or raises the right nozzle, and applies
   that nozzle's X offset (-30.5 mm, `HOTEND_OFFSET_X`) and Z offset (`M206 E`). So the slicer's extruder offsets are 0,
   and its tool-change G-code is empty.
+- **Relative extrusion (`M83`), with `G92 E0` every layer**: PrusaSlicer only builds a wipe tower that way. Skriware's
+  firmware adjusts E on `G92` after a retraction, but relative moves don't depend on E's absolute value.
+- **No start-of-print priming**: PrusaSlicer ends it with `M1`, which on this firmware waits for a button press that never comes.
 - **The two-colour bed is 179 mm wide**, because the right nozzle can't reach past X 179.5. Keep the model and the
   wipe tower in it.
 - **Calibrate both nozzles' Z offsets** (Calibrate → Z offset, left and right) before the first two-colour print.

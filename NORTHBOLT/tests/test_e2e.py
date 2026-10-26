@@ -110,6 +110,31 @@ class TwoColourTests(E2EBase):
         self.assertIn("M109 T1 S205", hist[start:hist.index("G28")])   # both nozzles heated at the back corner
         self.assertIn("M109 T0 S200", hist[start:hist.index("G28")])
 
+    def test_real_prusaslicer_file(self):
+        """Sliced by PrusaSlicer 2.9 with slicer/PrusaSlicer-Skriware2-NORTHBOLT.ini: two blocks side by
+        side, one per nozzle (relative E, wipe tower, G92 E0 every layer, 12 swaps)."""
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "prusaslicer-two-colours.gcode")
+        self.assertEqual(self.rig.upload(src, "two.gcode")[0], 200)
+        with open(src, encoding="utf-8") as fh:
+            cmds = file_commands(fh.read().splitlines())
+        f = None
+        end = time.time() + 30
+        while time.time() < end:
+            f = next((x for x in self.rig.get("/api/files")["files"] if x["name"] == "two.gcode"), None)
+            if f and not f["scanning"] and f.get("filament_g_tools"):
+                break
+            time.sleep(0.2)
+        self.assertEqual(f["tools"], [0, 1])
+        self.assertEqual(f["filament_g_tools"], [1.01, 0.99])
+        self.rig.post("/api/print", {"file": "two.gcode"})
+        st = self.wait_done(600)
+        self.assertEqual(st["job"]["state"], "finished", st["job"])
+        hist = self.rig.sim_history(20000)
+        extrusions = collections.Counter(c for c in cmds if c.startswith("G1 ") and " E" in c)
+        ran = collections.Counter(c for c in hist if c in extrusions)
+        self.assertEqual(ran, extrusions, "every extrusion move ran exactly as often as the file has it")
+        self.assertEqual(sum(1 for c in hist if c in ("T0", "T1")), cmds.count("T0") + cmds.count("T1"))
+
 
 class LinkTests(E2EBase):
     """What the printer's console showed on 2026-10-19: a line got lost on the wire, and after a cancel

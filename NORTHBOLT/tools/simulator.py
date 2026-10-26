@@ -577,7 +577,7 @@ class Simulator:
                 self.cut_power()
                 continue
             fw.history.append(cmd)
-            fw.history = fw.history[-5000:]
+            fw.history = fw.history[-20000:]
             try:
                 await fw.execute(cmd)
             except _InlineOk:
