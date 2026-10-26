@@ -10,9 +10,11 @@ It runs the screen on the printer and is also usable from a phone or computer on
 
 - **Printing**: upload G-code from the screen, a browser, or straight from PrusaSlicer/OrcaSlicer
   (OctoPrint-compatible upload). Shows slicer thumbnails, print time, filament, layer, height and finish time.
-- **Heats up at the back-left corner**, like the original software. Before a file starts, NORTHBOLT homes X and Y,
-  parks the head at the park point (10, 265) and heats the bed and nozzles there to the file's own first temperatures.
-  The file then runs as sliced, and its own heat-up waits return at once. Turn it off in Settings → General.
+- **Heats up at the back-left corner**, like the original software. Before a file starts, NORTHBOLT homes all axes,
+  which brings the bed up even if the last print or a power-cut resume left it low. It sets the bed 5 mm under the
+  nozzle (`start.heat_z`), parks the head at the park point (10, 265) and heats the bed and nozzles there to the
+  file's own first temperatures. The file then runs as sliced, and its own heat-up waits return at once.
+  Turn it off in Settings → General.
 - **Print from a USB flash drive or SD card reader**: plug it into the Pi and a green dot appears on Files.
   The Files page gets a USB tab where you can browse folders and see thumbnails, print time and filament.
   Print copies the file to the Pi first, so you can pull the drive out once printing starts and power-loss resume still works.
@@ -30,7 +32,8 @@ It runs the screen on the printer and is also usable from a phone or computer on
 - **Power-loss recovery** without extra hardware: resume after a power cut from just before the last
   confirmed move, without homing Z into the part.
 - **Control**: jog, home, motors off, temperatures with presets, extrude and retract, tool select, extruder lift, fan, speed and flow.
-- **Filament**: load and unload per nozzle, runout sensors on and off, and a sensor check.
+- **Filament**: load and unload per nozzle, at the back-left corner like the original software (it homes X and Y
+  and parks there first, so drips miss the bed's print area), runout sensors on and off, and a sensor check.
 - **LED strips and spool scales** via the ATmega board on I2C: progress on the side LEDs, and grams left on each
   spool after a one-time calibration.
 - **Your own light colours** (Settings → LEDs). Each moment has its own colour and effect (solid, breathe, flash or off):

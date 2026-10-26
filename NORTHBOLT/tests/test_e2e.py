@@ -87,13 +87,28 @@ class PrintTests(E2EBase):
 
     def test_heats_at_the_back_left_before_the_file(self):
         self.make(layers=3, segs=8)
+        # the last print (or a power-cut resume) left the bed far down
+        self.rig.post("/api/console", {"command": "G28\nG1 Z150 F3000"})
         self.start_print()
         self.wait_done()
         hist = self.rig.sim_history()
-        start = hist.index("G28 X Y")
-        self.assertEqual(hist[start:start + 6], ["G28 X Y", "G1 X10 Y265 F6000", "M140 S60", "M104 T0 S200",
-                                                 "M190 S60", "M109 T0 S200"])
-        self.assertLess(start + 5, hist.index("G28"), "heated before the file's own start code")
+        start = hist.index("G1 Z150 F3000") + 1
+        # home everything (the bed comes up), bed 5 mm under the nozzle, back left corner, then heat
+        self.assertEqual(hist[start:start + 8], ["G90", "G28", "G1 Z5 F600", "G1 X10 Y265 F6000", "M140 S60",
+                                                 "M104 T0 S200", "M190 S60", "M109 T0 S200"])
+        self.assertLess(start + 7, hist.index("G28", start + 2), "heated before the file's own start code")
+
+    def test_filament_at_the_back_left(self):
+        for action, tool in (("load", 1), ("unload", 0)):
+            self.rig.post("/api/filament", {"action": action, "tool": tool, "temp": 200})
+            self.rig.wait(lambda s: s["op"] is not None, 10, f"{action} to start")
+            self.rig.wait(lambda s: s["op"] is None, 120, f"{action} to finish")
+            hist = self.rig.sim_history()
+            start = len(hist) - 1 - hist[::-1].index("G28 X Y")
+            moved = ["G28 X Y", "G1 X10 Y265 F6000"] + (["T1"] if tool == 1 else [])
+            self.assertEqual(hist[start:start + len(moved)], moved, action)    # parked before heating
+            self.assertIn(f"M109 T{tool} S200", hist[start:])
+            self.assertTrue(any(c.startswith("G1 E" if action == "load" else "G1 E-") for c in hist[start:]), action)
 
 
 class TwoColourTests(E2EBase):
@@ -106,9 +121,10 @@ class TwoColourTests(E2EBase):
         self.assert_each_once(cmds, hist)
         self.assertEqual(hist.count("T1"), 6)                   # a swap to the right nozzle every layer
         self.assertEqual(hist.count("T0"), 5)
-        start = hist.index("G28 X Y")
-        self.assertIn("M109 T1 S205", hist[start:hist.index("G28")])   # both nozzles heated at the back corner
-        self.assertIn("M109 T0 S200", hist[start:hist.index("G28")])
+        start = hist.index("G28")                                       # NORTHBOLT's, before the file
+        heat = hist[start:hist.index("G28", start + 1)]                 # up to the file's own G28
+        self.assertIn("M109 T1 S205", heat)                             # both nozzles heated at the back corner
+        self.assertIn("M109 T0 S200", heat)
 
     def test_real_prusaslicer_file(self):
         """Sliced by PrusaSlicer 2.9 with slicer/PrusaSlicer-Skriware2-NORTHBOLT.ini: two blocks side by

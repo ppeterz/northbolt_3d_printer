@@ -221,25 +221,28 @@ class JobRunner:
                 self._set_state("error")
 
     async def _heat_at_park(self):
-        """Like the original Skriware software: home X and Y, move to the park point (back left, off the
-        bed's print area) and heat the bed and nozzles to the file's own temperatures there, so the head
-        doesn't wait (and ooze) over the middle of the bed. The file then starts as sliced; its own heat-up
-        waits return at once."""
+        """Like the original Skriware software: home all axes, bring the bed up under the nozzle, move to
+        the park point (back left, off the bed's print area) and heat the bed and nozzles to the file's own
+        temperatures there, so the head doesn't wait (and ooze) over the middle of the bed. Homing Z here
+        too means the bed is up even when the last print or a power-cut resume left it low, and even if
+        the file's own start code doesn't home Z. The file then starts as sliced; its own heat-up waits
+        return at once."""
         temps = await asyncio.get_running_loop().run_in_executor(None, start_temps, self.path)
         bed, tools = temps["bed"], temps["tools"]
         if bed is None and not tools:
             return
         p = self.svc.settings["pause"]
-        self.message = "Heating at the back corner"
+        heat_z = float(self.svc.settings["start"].get("heat_z", 5.0))
+        self.message = "Homing, then heating at the back corner"
         self._set_state("starting")
-        cmds = ["G90", "G28 X Y", f"G1 X{fmt(p['park_x'])} Y{fmt(p['park_y'])} F6000"]
+        cmds = ["G90", "G28", f"G1 Z{fmt(heat_z)} F600", f"G1 X{fmt(p['park_x'])} Y{fmt(p['park_y'])} F6000"]
         if bed:
             cmds.append(f"M140 S{fmt(bed)}")
         cmds += [f"M104 T{t} S{fmt(temp)}" for t, temp in sorted(tools.items())]   # all heat at once,
         if bed:
             cmds.append(f"M190 S{fmt(bed)}")                                        # then wait for each
         cmds += [f"M109 T{t} S{fmt(temp)}" for t, temp in sorted(tools.items())]
-        log.info("Heating at the park point before %s: %s", self.file, ", ".join(cmds[3:]))
+        log.info("Heating at the park point before %s: %s", self.file, ", ".join(cmds[4:]))
         for c in cmds:
             if self._cancel or self.error:
                 return

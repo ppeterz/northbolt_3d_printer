@@ -39,9 +39,9 @@ DEFAULTS = {
         "min_temp": 180,         # loading/unloading heats to at least this
     },
 
-    # Starting a print: like the original software, heat up with the head parked at the back left
-    # (pause.park_x / park_y), then run the file.
-    "start": {"heat_at_park": True},
+    # Starting a print: like the original software, home all axes, bring the bed up to heat_z under the
+    # nozzle and heat up with the head parked at the back left (pause.park_x / park_y), then run the file.
+    "start": {"heat_at_park": True, "heat_z": 5.0},
 
     "pause": {
         "retract": 2.0,          # mm

@@ -562,7 +562,8 @@ class PrinterService:
         await self.run(cmds)
 
     async def filament(self, action, tool, temp=None):
-        """Load or unload filament: heat, then push or pull. Runs as a background op."""
+        """Load or unload filament: move to the back left corner, heat, then push or pull. Runs as a
+        background op."""
         self.require_ready(allow_paused=True)
         if self.op:
             raise RuntimeError("Another filament operation is running")
@@ -575,9 +576,19 @@ class PrinterService:
                 self.op = {"name": action, "tool": tool, "message": f"Heating to {target:g} °C"}
                 self.notify("op")
                 cmds = []
-                if tool != self.tool and not self.job.active:
-                    cmds.append(f"T{tool}")
-                cmds += [f"M104 T{tool} S{target:g}", f"M109 T{tool} S{target:g}", "M83"]
+                if not self.job.active:
+                    # Like Skriware's software: load and unload at the back left corner, off the print
+                    # area, so what drips out doesn't land on the bed. (A paused print is parked there.)
+                    p = self.settings["pause"]
+                    self.op["message"] = "Moving to the back corner"
+                    self.notify("op")
+                    cmds += ["G90", "G28 X Y", f"G1 X{p['park_x']:g} Y{p['park_y']:g} F6000"]
+                    if tool != 0:
+                        cmds.append(f"T{tool}")         # homing switched to the left nozzle
+                await self.run(cmds)
+                self.op["message"] = f"Heating to {target:g} °C"
+                self.notify("op")
+                cmds = [f"M104 T{tool} S{target:g}", f"M109 T{tool} S{target:g}", "M83"]
                 await self.run(cmds)
                 if action == "load":
                     self.op["message"] = "Loading filament"
