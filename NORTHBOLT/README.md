@@ -243,6 +243,12 @@ It was made and test-sliced with PrusaSlicer 2.9. Import it with **File → Impo
 - **Skriware 2 - two colours (NORTHBOLT)**: two nozzles. Extruder 1 is the left nozzle (T0) and extruder 2 the right one (T1).
 - **Skriware 2 - left nozzle (NORTHBOLT)**: one colour, with the full 200 mm bed width.
 
+For a first two-colour print, open `slicer/two-colour-test.3mf`. It's a 50 x 50 x 2 mm tile with a 1 mm base from
+the left nozzle and a checkerboard of 10 mm squares from both nozzles on top, about 36 minutes and 6 g of PLA.
+Where the squares meet shows how well the nozzles line up. A gap or overlap along X or Y is the right nozzle's
+offset (`HOTEND_OFFSET_X`/`Y` in the firmware). The colours are already assigned; press **A**, then slice.
+`make_two_colour_test.py` rebuilds it.
+
 To print in two colours:
 
 1. Select the two-colour printer, and pick a filament for each extruder on the right-hand side.
