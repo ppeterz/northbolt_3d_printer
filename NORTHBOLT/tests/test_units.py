@@ -80,6 +80,21 @@ class GcodeTests(unittest.TestCase):
             self.assertAlmostEqual(meta["max_z"], 1.0)
             self.assertTrue(meta["thumbnail"].startswith("data:image/png;base64,"))
 
+    def test_scan_two_colours(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "a.gcode")
+            make_gcode(path, layers=3, segs=6, two_colours=True)
+            with open(path) as fh:
+                text = fh.read()
+            with open(path, "w", newline="\n") as fh:   # PrusaSlicer's footer: one amount per nozzle, then the total
+                fh.write(text.replace("; filament used [g] = 12.34\n",
+                                      "; filament used [mm] = 1200.5, 300.25\n; filament used [g] = 12.34, 5.67\n"
+                                      "; total filament used [g] = 18.01\n"))
+            meta = scan_file(path)
+            self.assertEqual(meta["tools"], [0, 1])
+            self.assertEqual(meta["filament_g_tools"], [12.34, 5.67])
+            self.assertAlmostEqual(meta["filament_g"], 18.01)
+
 
 class ProtocolTests(unittest.TestCase):
     def test_checksum(self):

@@ -1787,12 +1787,22 @@ function fileCard(attrs, thumb, name, metaHtml, cls = '') {
     <div class="name">${esc(name.replace(/\.(gcode|gco|g)$/i, ''))}</div><div class="meta num">${metaHtml}</div></div>`);
 }
 
+/** Nozzles the file prints with whose filament sensor reports no filament: ['left', 'right'] or fewer. */
+async function emptyNozzles(tools) {
+  let st = null;
+  try { st = (await post('/api/runout/query')).status; } catch (e) { return []; }   // can't tell: don't block
+  if (!st || st.off) return [];
+  const on = (S.runout && S.runout.enabled) || {};
+  return tools.map(t => (t === 1 ? 'right' : 'left')).filter(side => on[side] !== false && st[side] === false);
+}
+
 function fileDialog(name) {
   const f = files.find(x => x.name === name);
   if (!f) return;
   const rows = [
     ['Print time', f.est_time_s ? fmtDur(f.est_time_s) : '–'],
-    ['Filament', f.filament_g ? `${Math.round(f.filament_g)} g` : (f.filament_mm ? `${(f.filament_mm / 1000).toFixed(1)} m` : '–')],
+    ['Filament', f.filament_g_tools ? f.filament_g_tools.map((g, t) => `${toolName(t).toLowerCase()} ${Math.round(g)} g`).join(', ')
+      : f.filament_g ? `${Math.round(f.filament_g)} g` : (f.filament_mm ? `${(f.filament_mm / 1000).toFixed(1)} m` : '–')],
     ['Layers', f.layers || '–'], ['Height', f.max_z ? `${f.max_z} mm` : '–'],
     ['Nozzles', (f.tools || [0]).map(toolName).join(' + ')], ['Size', fmtSize(f.size)], ['Added', fmtDate(f.date)],
   ];
@@ -1814,6 +1824,10 @@ function fileDialog(name) {
       {
         label: busy ? 'Printer busy' : 'Print', cls: 'primary', onClick: async () => {
           if (busy) return false;
+          const empty = await emptyNozzles(f.tools || [0]);
+          if (empty.length && !(await confirmBox('No filament?',
+            `The ${empty.join(' and ')} filament sensor${empty.length > 1 ? 's report' : ' reports'} no filament, and this file prints with ${empty.length > 1 ? 'both nozzles' : 'that nozzle'}. Load it on the Filament page first, or print anyway.`,
+            'Print anyway', 'warn'))) return false;
           await post('/api/print', { file: f.name });
           showPage('home');
         },

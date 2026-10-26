@@ -103,7 +103,8 @@ class RecoveryStore:
             "file": d["file"],
             "layer": ck["state"].get("layer"),
             "z": ck["state"].get("z"),
-            "tool": ck["state"].get("tool", 0),
+            # the nozzle at the print when the power went (saved at every swap), not the layer's first one
+            "tool": (d.get("head") or {}).get("tool", ck["state"].get("tool", 0)),
             "saved": d.get("saved"),
             "progress": round(100.0 * ((d.get("progress") or d.get("sync") or ck)["offset"]) / max(1, d["size"]), 1),
         }

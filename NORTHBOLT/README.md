@@ -234,6 +234,35 @@ Phones and computers keep the normal layout. **Clear** on the same card uses the
 In PrusaSlicer or OrcaSlicer, add a physical printer of type **OctoPrint**. Use `http://<pi-address>:8080`
 and the API key from **Settings → System**. "Upload and print" then starts the print directly.
 
+### Two-colour printing (PrusaSlicer)
+
+`slicer/PrusaSlicer-Skriware2-NORTHBOLT.ini` holds two printers, PLA and PETG, and 0.2 mm print settings.
+It needs PrusaSlicer 2.6 or newer. Import it with **File → Import → Import Config Bundle**.
+
+- **Skriware 2 - two colours (NORTHBOLT)**: two nozzles. Extruder 1 is the left nozzle (T0) and extruder 2 the right one (T1).
+- **Skriware 2 - left nozzle (NORTHBOLT)**: one colour, with the full 200 mm bed width.
+
+To print in two colours:
+
+1. Select the two-colour printer, and pick a filament for each extruder on the right-hand side.
+2. Give parts of the model to extruder 2. Either right-click a part and choose **Extruder 2**, or paint
+   areas with the **Multimaterial painting** tool (shortcut N).
+3. Slice. The wipe tower at the back right cleans each nozzle after a swap. Each nozzle heats only if the print uses it.
+4. Upload it to NORTHBOLT. **File info** lists both nozzles and the grams of filament for each. **Print** warns
+   if a nozzle the file uses has no filament in its sensor.
+
+How it fits this printer:
+
+- **The firmware does the whole swap** on `T0`/`T1`. It lifts Z 3 mm, lowers or raises the right nozzle, and applies
+  that nozzle's X offset (-30.5 mm, `HOTEND_OFFSET_X`) and Z offset (`M206 E`). So the slicer's extruder offsets are 0,
+  and its tool-change G-code is empty.
+- **The two-colour bed is 179 mm wide**, because the right nozzle can't reach past X 179.5. Keep the model and the
+  wipe tower in it.
+- **Calibrate both nozzles' Z offsets** (Calibrate → Z offset, left and right) before the first two-colour print.
+  The colours only meet cleanly if the heights match.
+- **After a power cut**, the resume restarts on whichever nozzle the resume point needs. It frees and parks the nozzle
+  that was down at the print, so that is the one to wipe.
+
 ## How the Z offset works on this firmware
 
 Logical Z, as used by G-code and `M114`, is machine Z plus `home_offset[Z]`.

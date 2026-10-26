@@ -96,6 +96,21 @@ class PrintTests(E2EBase):
         self.assertLess(start + 5, hist.index("G28"), "heated before the file's own start code")
 
 
+class TwoColourTests(E2EBase):
+    def test_two_colour_print(self):
+        cmds = self.make(layers=6, segs=20, two_colours=True)
+        self.start_print()
+        st = self.wait_done()
+        self.assertEqual(st["job"]["state"], "finished", st["job"])
+        hist = self.rig.sim_history()
+        self.assert_each_once(cmds, hist)
+        self.assertEqual(hist.count("T1"), 6)                   # a swap to the right nozzle every layer
+        self.assertEqual(hist.count("T0"), 5)
+        start = hist.index("G28 X Y")
+        self.assertIn("M109 T1 S205", hist[start:hist.index("G28")])   # both nozzles heated at the back corner
+        self.assertIn("M109 T0 S200", hist[start:hist.index("G28")])
+
+
 class LinkTests(E2EBase):
     """What the printer's console showed on 2026-10-19: a line got lost on the wire, and after a cancel
     the board still expected the old line numbers (BAD COMMAND:N1 ... Last Line: 305)."""
@@ -243,8 +258,8 @@ class PowerLossTests(E2EBase):
         self.rig.post("/api/job/resume")
         self.rig.wait(lambda s: s["job"]["state"] == "printing", 60, "resumed printing")
         time.sleep(0.5)
-        after = self.rig.admin("state")
-        self.assertEqual(after["tool"], tool)
+        # a two-colour file swaps nozzles by itself: compare while the same nozzle prints
+        after = self.rig.wait_sim(lambda s: s["tool"] == tool, 60, f"T{tool} printing again")
         # The nozzle-to-G-code-Z relationship must be the same as before the outage (or `rises` higher).
         drift = (after["nozzle"] - after["logical_z"]) - offset_before
         self.assertAlmostEqual(drift, rises, places=3, msg=f"Z drifted by {drift:.3f} mm, expected {rises:.3f} mm")
@@ -271,6 +286,24 @@ class PowerLossTests(E2EBase):
         cmds = self.make(layers=25, segs=60, tool=tool)
         layer = self._layer(cmds, 7)
         self._power_loss_cycle(cmds, tool, "after", layer[len(layer) // 2])
+
+    def test_power_loss_two_colours_right_half(self):
+        # cut deep into the right nozzle's half of a layer: it resumes on the right nozzle
+        cmds = self.make(layers=12, segs=80, two_colours=True)
+        layer = self._layer(cmds, 7)
+        self._power_loss_cycle(cmds, 1, "after", layer[layer.index("T1") + 36])
+
+    def test_power_loss_two_colours_just_after_swap(self):
+        # cut a few moves after the swap: the resume backs off to before it, so it restarts on the left
+        # nozzle (the right one, lowered at the print, is what gets freed and wiped) and the file swaps
+        # to the right one again by itself
+        cmds = self.make(layers=12, segs=40, two_colours=True)
+        layer = self._layer(cmds, 7)
+        self._power_loss_cycle(cmds, 1, "after", layer[layer.index("T1") + 6])
+        hist = self.rig.sim_history()
+        resumed = hist[hist.index("G28 X Y"):]
+        self.assertIn("T1", resumed[resumed.index("G28 X Y"):])
+        self.assertIn("M109 T1 S150", hist[:hist.index("G28 X Y")])     # softened the nozzle that was down
 
     def test_power_loss_resume_left_nozzle(self):
         self._mid_layer(0)

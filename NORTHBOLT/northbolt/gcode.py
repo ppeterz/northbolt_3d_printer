@@ -212,8 +212,8 @@ TIME_PATTERNS = [
     re.compile(r";\s*model printing time\s*[:=]\s*([^;]+)", re.I),
 ]
 CURA_TIME = re.compile(r";TIME:(\d+)")
-FIL_MM = re.compile(r";\s*filament used \[mm\]\s*=\s*([\d.]+)", re.I)
-FIL_G = re.compile(r";\s*(?:total )?filament used \[g\]\s*=\s*([\d.]+)", re.I)
+FIL_MM = re.compile(r";\s*filament used \[mm\]\s*=\s*([\d.]+(?:\s*,\s*[\d.]+)*)", re.I)
+FIL_G = re.compile(r";\s*(?:total )?filament used \[g\]\s*=\s*([\d.]+(?:\s*,\s*[\d.]+)*)", re.I)
 CURA_FIL = re.compile(r";Filament used:\s*([\d.]+)m", re.I)
 THUMB_BEGIN = re.compile(r";\s*thumbnail(?:_(PNG|JPG|QOI))?\s+begin\s+(\d+)x(\d+)", re.I)
 
@@ -253,9 +253,13 @@ def _comment_meta(line, meta):
         m = pat.match(line)
         if m and meta[key] is None:
             try:
-                meta[key] = float(m.group(1)) * scale
+                # PrusaSlicer lists one amount per nozzle for two-colour prints: "= 12.34, 5.67"
+                per_tool = [float(v) * scale for v in m.group(1).split(",") if v.strip()]
             except ValueError:
-                pass
+                continue
+            meta[key] = sum(per_tool)
+            if key == "filament_g" and len(per_tool) > 1:
+                meta["filament_g_tools"] = per_tool
 
 
 class _Thumbs:
